@@ -466,7 +466,8 @@ const st = {
   selBar: null,
   histBars: 120,
   panOff: 0,
-  scrub: false
+  scrub: false,
+  reqId: 0
 };
 
 function fmt(v) {
@@ -557,22 +558,23 @@ async function fetchYahoo(sym, iv) {
       "?symbol=" + enc +
       "&interval=" + iv +
       "&range=" + rng,
-    "https://corsproxy.io/?" + encT,
-    "https://api.allorigins.win" +
-      "/raw?url=" + encT,
     "https://api.codetabs.com" +
-      "/v1/proxy?quest=" + encT
+      "/v1/proxy?quest=" + encT,
+    "https://corsproxy.io/?" + encT
   ];
 
   const cKey =
     "gann_web_" + sym + "_" + iv;
 
-  for (const url of proxies) {
+  for (let i = 0;
+    i < proxies.length; i++) {
+    const url = proxies[i];
+    const ms = i === 0 ? 12000 : 7000;
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(
         () => ctrl.abort(),
-        8500
+        ms
       );
       const r = await fetch(url, {
         signal: ctrl.signal
@@ -1997,15 +1999,13 @@ function fillPresets() {
 }
 
 async function loadSymbol() {
+  const myReq = ++st.reqId;
   const ld =
     document.getElementById("loadBox");
   const eb =
     document.getElementById("errBox");
   ld.style.display = "flex";
   eb.style.display = "none";
-  st.customAnc = null;
-  st.selBar = null;
-  st.panOff = 0;
 
   const raw = document.getElementById(
     "codeInp"
@@ -2017,23 +2017,32 @@ async function loadSymbol() {
   document.getElementById(
     "codeInp"
   ).value = sym;
-  st.code = sym;
-  st.name = NAMES[sym] || "";
 
   try {
     const data = await fetchYahoo(
       sym,
       st.interval
     );
+    if (myReq !== st.reqId) return;
+    st.code = sym;
+    st.name = data.name ||
+      NAMES[sym] || "";
+    st.customAnc = null;
+    st.selBar = null;
+    st.panOff = 0;
     st.candles = data.candles;
-    if (data.name) st.name = data.name;
     runAnalysis();
   } catch (e) {
+    if (myReq !== st.reqId) return;
     eb.textContent =
       "報價讀取失敗，請檢查代碼：" +
       sym;
     eb.style.display = "block";
   }
+  if (myReq === st.reqId) {
+    ld.style.display = "none";
+  }
+}
   ld.style.display = "none";
 }
 
