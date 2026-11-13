@@ -1,0 +1,2376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta
+  name="viewport"
+  content="width=device-width,
+    initial-scale=1.0">
+<meta
+  name="theme-color"
+  content="#0b0d12">
+<title>江恩時空共振與和諧分析</title>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: #090b10;
+  color: #f1f5f9;
+  font-family: -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  padding: 10px;
+}
+.app {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: #141821;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #242b38;
+}
+.seg {
+  display: inline-flex;
+  background: #0b0d12;
+  border-radius: 7px;
+  padding: 2px;
+  border: 1px solid #283040;
+}
+.seg button {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+.btn {
+  background: #1e2533;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.btn:hover {
+  background: #2a3447;
+}
+.btn.on {
+  background: #0f766e;
+  border-color: #14b8a6;
+  color: #fff;
+}
+.btn-hi {
+  background: #ea580c;
+  border-color: #f97316;
+  color: #fff;
+  font-weight: 600;
+}
+.btn-y {
+  color: #facc15;
+  border-color: #854d0e;
+}
+.btn-c {
+  color: #38bdf8;
+  border-color: #075985;
+}
+input, select {
+  background: #0b0d12;
+  color: #fff;
+  border: 1px solid #334155;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+input {
+  width: 105px;
+  text-transform: uppercase;
+}
+.lbl {
+  font-size: 12px;
+  color: #94a3b8;
+}
+.sp {
+  flex: 1;
+}
+.err {
+  background: #7f1d1d;
+  color: #fecaca;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  display: none;
+}
+.main {
+  display: grid;
+  grid-template-columns: 1.68fr 1fr;
+  gap: 10px;
+  min-height: 76vh;
+}
+@media (max-width: 860px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+}
+.chart-box {
+  background: #12161f;
+  border: 1px solid #242b38;
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 460px;
+}
+.hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.hud-txt {
+  color: #f8fafc;
+  font-weight: 500;
+}
+.c-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 400px;
+  touch-action: none;
+}
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+.load {
+  position: absolute;
+  inset: 0;
+  background: rgba(9, 11, 16, 0.75);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #38bdf8;
+  border-radius: 8px;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 82vh;
+  overflow-y: auto;
+}
+.card {
+  background: #141821;
+  border: 1px solid #242b38;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.c-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 14px;
+}
+.c-org { color: #fb923c; }
+.c-mnt { color: #34d399; }
+.c-yel { color: #facc15; }
+.c-pnk {
+  color: #f472b6;
+  font-size: 12px;
+  font-weight: 700;
+}
+.c-big {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+.c-sub {
+  font-size: 12px;
+  color: #fde047;
+}
+.c-val {
+  font-size: 13px;
+  color: #38bdf8;
+}
+.rep {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="seg" id="mktSeg">
+      <button
+        data-v="us">美股</button>
+      <button
+        class="on"
+        data-v="hk">港股</button>
+    </div>
+    <button
+      class="btn btn-y"
+      id="btnHsi">恒指</button>
+    <button
+      class="btn btn-c"
+      id="btnIxic">納指</button>
+    <select id="presetSel">
+      <option value="">自選標的</option>
+    </select>
+    <input
+      id="codeInp"
+      value="^HSI"
+      placeholder="輸入代碼">
+    <button
+      class="btn btn-hi"
+      id="btnGo">分析</button>
+    <div class="sp"></div>
+    <div class="seg" id="stySeg">
+      <button
+        class="on"
+        data-v="candle">陰陽燭</button>
+      <button
+        data-v="line">折線圖</button>
+    </div>
+    <div class="seg" id="intSeg">
+      <button
+        data-v="1d">日線</button>
+      <button
+        class="on"
+        data-v="1wk">週線</button>
+      <button
+        data-v="1mo">月線</button>
+    </div>
+  </div>
+
+  <div class="bar">
+    <span class="lbl">延伸:</span>
+    <div class="seg" id="horSeg">
+      <button
+        data-v="30">30期</button>
+      <button
+        class="on"
+        data-v="60">60期</button>
+      <button
+        data-v="90">90期</button>
+      <button
+        data-v="120">120期</button>
+      <button
+        data-v="252">252期</button>
+    </div>
+    <button
+      class="btn on"
+      id="togGrid">八分網格</button>
+    <button
+      class="btn"
+      id="togFib">黃金位</button>
+    <button
+      class="btn on"
+      id="togHarm">和諧形態</button>
+    <div class="sp"></div>
+    <span
+      class="lbl"
+      id="volLbl">波動率:1.0x</span>
+    <button
+      class="btn"
+      id="volDn">-</button>
+    <button
+      class="btn"
+      id="volUp">+</button>
+  </div>
+
+  <div class="err" id="errBox"></div>
+
+  <div class="main">
+    <div class="chart-box">
+      <div class="hud">
+        <span
+          class="hud-txt"
+          id="hudTxt">載入中...</span>
+        <div class="sp"></div>
+        <button
+          class="btn on"
+          id="btnMode">拖動歷史</button>
+        <button
+          class="btn btn-hi"
+          id="btnLatest"
+          style="display:none">
+          回最新
+        </button>
+        <button
+          class="btn btn-c"
+          id="btnZoomIn">+</button>
+        <button
+          class="btn btn-c"
+          id="btnZoomOut">-</button>
+        <button
+          class="btn btn-hi"
+          id="btnSetAnc"
+          style="display:none">
+          設為起點
+        </button>
+        <button
+          class="btn btn-y"
+          id="btnAutoAnc">自動起點</button>
+      </div>
+      <div
+        class="c-wrap"
+        id="cWrap">
+        <canvas id="cv"></canvas>
+        <div
+          class="load"
+          id="loadBox">
+          抓取報價中...
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <div class="c-hd c-org">
+          <span>大級別圓周與轉勢窗口</span>
+        </div>
+        <div
+          class="c-pnk"
+          id="turnBadge"
+          style="display:none">
+          ◎ 命中 90/180/360 圓周共振
+        </div>
+        <div
+          class="c-big"
+          id="turnDate">--</div>
+        <div
+          class="c-sub"
+          id="turnWhy">--</div>
+        <div
+          class="c-val"
+          id="turnPrice">--</div>
+      </div>
+
+      <div class="card">
+        <div class="c-hd c-mnt">
+          <span>和諧交易形態推演</span>
+        </div>
+        <div
+          class="c-big"
+          id="harmName">--</div>
+        <div
+          class="c-sub"
+          id="harmDate">--</div>
+        <div
+          class="c-val"
+          id="harmPrz">--</div>
+      </div>
+
+      <div class="card">
+        <div class="c-hd c-yel">
+          <span id="repTitle">
+            江恩策略建議
+          </span>
+          <button
+            class="btn"
+            id="btnCopy">複製報告</button>
+        </div>
+        <div
+          class="rep"
+          id="repBody">載入中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS = [
+  { s: "^HSI", n: "恒生指數", m: "hk" },
+  { s: "^HSCE", n: "國企指數", m: "hk" },
+  { s: "0700.HK", n: "騰訊控股", m: "hk" },
+  { s: "9988.HK", n: "阿里巴巴", m: "hk" },
+  { s: "0005.HK", n: "匯豐控股", m: "hk" },
+  { s: "0388.HK", n: "香港交易所", m: "hk" },
+  { s: "^IXIC", n: "納斯達克指數", m: "us" },
+  { s: "^GSPC", n: "標普500指數", m: "us" },
+  { s: "^DJI", n: "道瓊斯指數", m: "us" },
+  { s: "AAPL", n: "蘋果", m: "us" },
+  { s: "NVDA", n: "輝達", m: "us" },
+  { s: "TSLA", n: "特斯拉", m: "us" }
+];
+
+const NAMES = {
+  "^HSI": "恒生指數",
+  "^HSCE": "國企指數",
+  "^IXIC": "納斯達克指數",
+  "^GSPC": "標普500指數",
+  "^DJI": "道瓊斯指數",
+  "0005.HK": "匯豐控股",
+  "0700.HK": "騰訊控股",
+  "9988.HK": "阿里巴巴",
+  "0388.HK": "香港交易所",
+  "1299.HK": "友邦保險",
+  "3690.HK": "美團",
+  "1810.HK": "小米集團",
+  "0941.HK": "中國移動",
+  "AAPL": "蘋果",
+  "NVDA": "輝達",
+  "TSLA": "特斯拉",
+  "MSFT": "微軟",
+  "GOOGL": "谷歌",
+  "AMZN": "亞馬遜",
+  "META": "Meta",
+  "AMD": "超微半導體"
+};
+
+const st = {
+  market: "hk",
+  code: "^HSI",
+  name: "恒生指數",
+  style: "candle",
+  interval: "1wk",
+  horizon: 60,
+  candles: [],
+  res: null,
+  customAnc: null,
+  volMult: 1.0,
+  showGrid: true,
+  showFib: false,
+  showHarm: true,
+  selBar: null,
+  histBars: 120,
+  panOff: 0,
+  scrub: false
+};
+
+function fmt(v) {
+  return Number(v).toFixed(2);
+}
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(
+    d.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    d.getDate()
+  ).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+function addDays(d, days) {
+  const ms = d.getTime() +
+    days * 86400000;
+  return new Date(ms);
+}
+
+function intvMeta(iv) {
+  if (iv === "1wk") {
+    return {
+      t: "週線",
+      days: 7.0,
+      u: "週"
+    };
+  }
+  if (iv === "1mo") {
+    return {
+      t: "月線",
+      days: 30.44,
+      u: "月"
+    };
+  }
+  return {
+    t: "日線",
+    days: 1.45,
+    u: "日"
+  };
+}
+
+function normSym(raw, mkt) {
+  const c = raw.trim().toUpperCase();
+  if (!c) {
+    return mkt === "hk"
+      ? "^HSI" : "^IXIC";
+  }
+  const idx = [
+    "HSI", "HSCE", "IXIC",
+    "GSPC", "DJI"
+  ];
+  if (idx.includes(c)) {
+    return "^" + c;
+  }
+  if (mkt === "hk" &&
+    !c.endsWith(".HK") &&
+    !c.startsWith("^")) {
+    const d = c.replace(/\D/g, "");
+    if (d.length > 0) {
+      return d.padStart(4, "0") +
+        ".HK";
+    }
+  }
+  return c;
+}
+
+async function fetchYahoo(sym, iv) {
+  let rng = "5y";
+  if (iv === "1wk") rng = "15y";
+  if (iv === "1mo") rng = "max";
+  const enc = encodeURIComponent(sym);
+  const base =
+    "https://query1.finance.yahoo.com";
+  const path =
+    "/v8/finance/chart/" + enc;
+  const q = "?range=" + rng +
+    "&interval=" + iv;
+  const target = base + path + q;
+  const encT =
+    encodeURIComponent(target);
+
+  const proxies = [
+    "/.netlify/functions/yahoo" +
+      "?symbol=" + enc +
+      "&interval=" + iv +
+      "&range=" + rng,
+    "https://corsproxy.io/?" + encT,
+    "https://api.allorigins.win" +
+      "/raw?url=" + encT,
+    "https://api.codetabs.com" +
+      "/v1/proxy?quest=" + encT
+  ];
+
+  const cKey =
+    "gann_web_" + sym + "_" + iv;
+
+  for (const url of proxies) {
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(
+        () => ctrl.abort(),
+        8500
+      );
+      const r = await fetch(url, {
+        signal: ctrl.signal
+      });
+      clearTimeout(tid);
+      if (!r.ok) continue;
+      const json = await r.json();
+      const parsed = parseYahoo(
+        json,
+        sym
+      );
+      if (parsed.candles.length > 0) {
+        try {
+          localStorage.setItem(
+            cKey,
+            JSON.stringify(parsed)
+          );
+        } catch (e) {}
+        return parsed;
+      }
+    } catch (e) {}
+  }
+
+  const saved =
+    localStorage.getItem(cKey);
+  if (saved) {
+    const obj = JSON.parse(saved);
+    obj.candles.forEach(b => {
+      b.date = new Date(b.date);
+    });
+    return obj;
+  }
+  throw new Error("無法取得報價");
+}
+
+function parseYahoo(json, sym) {
+  const res =
+    json?.chart?.result?.[0];
+  const ts = res?.timestamp;
+  const q =
+    res?.indicators?.quote?.[0];
+  if (!ts || !q) {
+    return {
+      symbol: sym,
+      name: "",
+      candles: []
+    };
+  }
+  const apiN =
+    res.meta?.shortName ||
+    res.meta?.longName || "";
+  const fn = NAMES[sym] || apiN;
+  const list = [];
+  let idx = 0;
+  for (let i = 0; i < ts.length; i++) {
+    const o = q.open[i];
+    const h = q.high[i];
+    const l = q.low[i];
+    const c = q.close[i];
+    if (o == null || h == null ||
+      l == null || c == null) {
+      continue;
+    }
+    list.push({
+      id: idx,
+      date: new Date(ts[i] * 1000),
+      open: o,
+      high: h,
+      low: l,
+      close: c
+    });
+    idx++;
+  }
+  return {
+    symbol: sym,
+    name: fn,
+    candles: list
+  };
+}
+
+function detectSwings(candles) {
+  const his = candles.map(c => c.high);
+  const los = candles.map(c => c.low);
+  const hiA = Math.max(...his);
+  const loA = Math.min(...los);
+  const sp = (hiA - loA) /
+    Math.max(0.01, loA);
+  const th = Math.max(
+    0.025,
+    Math.min(0.12, sp * 0.14)
+  );
+  const pts = [];
+  let mode = 0;
+  let cHi = candles[0].high;
+  let cHiI = 0;
+  let cLo = candles[0].low;
+  let cLoI = 0;
+
+  for (const c of candles) {
+    if (c.high > cHi) {
+      cHi = c.high;
+      cHiI = c.id;
+    }
+    if (c.low < cLo) {
+      cLo = c.low;
+      cLoI = c.id;
+    }
+    if (mode === 0) {
+      const up = (c.high - cLo) /
+        Math.max(0.001, cLo);
+      const dn = (cHi - c.low) /
+        Math.max(0.001, cHi);
+      if (up >= th) {
+        pts.push({
+          index: cLoI,
+          date: candles[cLoI].date,
+          price: cLo,
+          isHigh: false
+        });
+        mode = 1;
+        cHi = c.high;
+        cHiI = c.id;
+      } else if (dn >= th) {
+        pts.push({
+          index: cHiI,
+          date: candles[cHiI].date,
+          price: cHi,
+          isHigh: true
+        });
+        mode = -1;
+        cLo = c.low;
+        cLoI = c.id;
+      }
+    } else if (mode === 1) {
+      const dr = (cHi - c.low) /
+        Math.max(0.001, cHi);
+      if (dr >= th) {
+        pts.push({
+          index: cHiI,
+          date: candles[cHiI].date,
+          price: cHi,
+          isHigh: true
+        });
+        mode = -1;
+        cLo = c.low;
+        cLoI = c.id;
+      }
+    } else {
+      const ri = (c.high - cLo) /
+        Math.max(0.001, cLo);
+      if (ri >= th) {
+        pts.push({
+          index: cLoI,
+          date: candles[cLoI].date,
+          price: cLo,
+          isHigh: false
+        });
+        mode = 1;
+        cHi = c.high;
+        cHiI = c.id;
+      }
+    }
+  }
+  return pts;
+}
+
+function pickAnchor(
+  candles,
+  swings,
+  customIdx
+) {
+  if (customIdx != null &&
+    customIdx >= 0 &&
+    customIdx < candles.length) {
+    const c = candles[customIdx];
+    const mid = (c.high + c.low) / 2;
+    const isH = c.close < mid;
+    return {
+      index: customIdx,
+      date: c.date,
+      price: isH ? c.high : c.low,
+      isHigh: isH
+    };
+  }
+  const lb = Math.min(
+    candles.length,
+    160
+  );
+  const start = candles.length - lb;
+  const rec = swings.filter(s =>
+    s.index >= start &&
+    s.index < candles.length - 5
+  );
+  if (rec.length > 0) {
+    return rec[rec.length - 1];
+  }
+  let minC = candles[start];
+  for (
+    let i = start;
+    i < candles.length;
+    i++
+  ) {
+    if (candles[i].low < minC.low) {
+      minC = candles[i];
+    }
+  }
+  return {
+    index: minC.id,
+    date: minC.date,
+    price: minC.low,
+    isHigh: false
+  };
+}
+
+function calcVol(
+  candles,
+  anc,
+  swings
+) {
+  const aft = swings.filter(
+    s => s.index > anc.index + 3
+  );
+  if (aft.length > 0) {
+    const nx = aft[0];
+    const dp = Math.abs(
+      nx.price - anc.price
+    );
+    const dt = Math.max(
+      1,
+      nx.index - anc.index
+    );
+    return dp / dt;
+  }
+  const last =
+    candles[candles.length - 1];
+  const dp = Math.abs(
+    last.close - anc.price
+  );
+  const dt = Math.max(
+    1,
+    last.id - anc.index
+  );
+  return dp / dt;
+}
+
+function buildRays(
+  anc,
+  isUp,
+  vol,
+  endIdx
+) {
+  const specs = [
+    ["8x1", 8],
+    ["4x1", 4],
+    ["3x1", 3],
+    ["2x1", 2],
+    ["1x1", 1],
+    ["1x2", 0.5],
+    ["1x3", 1 / 3],
+    ["1x4", 0.25],
+    ["1x8", 0.125]
+  ];
+  const sign = isUp ? 1 : -1;
+  return specs.map(([name, r]) => {
+    const p0 = anc.price;
+    const dt = endIdx - anc.index;
+    const p1 = Math.max(
+      0,
+      p0 + sign * vol * r * dt
+    );
+    return {
+      name,
+      ratio: r,
+      isPrimary: name === "1x1",
+      pts: [
+        { bar: anc.index, price: p0 },
+        { bar: endIdx, price: p1 }
+      ]
+    };
+  });
+}
+
+function moonEvent(dt) {
+  const ref = 947182440000;
+  const syn = 29.53058867;
+  const diff =
+    (dt.getTime() - ref) / 86400000;
+  let ph = diff % syn;
+  if (ph < 0) ph += syn;
+  if (ph <= 1.0 || ph >= syn - 1.0) {
+    return "天文新月窗口";
+  }
+  if (Math.abs(ph - syn / 2) <= 1.0) {
+    return "天文滿月窗口";
+  }
+  return null;
+}
+
+function calcTimeHits(
+  candles,
+  anc,
+  swings,
+  hor,
+  iv
+) {
+  const fibs = [
+    5, 8, 13, 21, 34, 55, 89, 144, 233
+  ];
+  const g7 = [
+    7, 14, 28, 30, 42, 45, 49, 60,
+    77, 90, 120, 144, 180, 270, 360
+  ];
+  const lastI = candles.length - 1;
+  const lastD = candles[lastI].date;
+  const map = new Map();
+  const majSet = new Set();
+  const meta = intvMeta(iv);
+  const u = meta.u;
+
+  const pushR = (t, msg, isMaj) => {
+    if (!map.has(t)) map.set(t, []);
+    map.get(t).push(msg);
+    if (isMaj) majSet.add(t);
+  };
+
+  for (const f of fibs) {
+    const t = anc.index + f;
+    const d = t - lastI;
+    if (d >= 1 && d <= hor) {
+      pushR(
+        t,
+        "費波那契第" + f + u,
+        false
+      );
+    }
+  }
+  for (const g of g7) {
+    const t = anc.index + g;
+    const d = t - lastI;
+    if (d >= 1 && d <= hor) {
+      const m = [
+        90, 180, 270, 360
+      ].includes(g);
+      pushR(
+        t,
+        "江恩神奇數" + g + u,
+        m
+      );
+    }
+  }
+
+  const safeEnd = Math.max(
+    1,
+    lastI - 4
+  );
+  let topB = candles[0];
+  let botB = candles[0];
+  for (let i = 0; i < safeEnd; i++) {
+    if (candles[i].high > topB.high) {
+      topB = candles[i];
+    }
+    if (candles[i].low < botB.low) {
+      botB = candles[i];
+    }
+  }
+
+  const addCir = (refI, rName) => {
+    const cs = iv === "1mo"
+      ? [60, 90, 120, 180, 240, 360]
+      : [90, 180, 270, 360];
+    for (const c of cs) {
+      const t = refI + c;
+      const d = t - lastI;
+      if (d >= 1 && d <= hor) {
+        let note = "";
+        if (iv === "1wk" &&
+          c === 180) {
+          note = "(約3.5年)";
+        } else if (iv === "1wk" &&
+          c === 360) {
+          note = "(約7年)";
+        } else if (iv === "1mo" &&
+          c === 120) {
+          note = "(10年周期)";
+        } else if (iv === "1mo" &&
+          c === 360) {
+          note = "(30年土星)";
+        }
+        const msg = rName + "滿" +
+          c + u + note;
+        pushR(t, msg, true);
+      }
+    }
+  };
+  addCir(topB.id, "歷史大頂");
+  addCir(botB.id, "歷史大底");
+
+  if (iv === "1d") {
+    for (let d = 1; d <= hor; d++) {
+      const est = addDays(
+        lastD,
+        d * meta.days
+      );
+      const m = moonEvent(est);
+      if (m) pushR(lastI + d, m, false);
+    }
+  }
+
+  const keys = Array.from(
+    map.keys()
+  ).sort((a, b) => a - b);
+  const hits = [];
+  for (const k of keys) {
+    const rs = map.get(k);
+    const isMaj = majSet.has(k);
+    const keyHit = rs.some(s =>
+      s.includes("49") ||
+      s.includes("55") ||
+      s.includes("89") ||
+      s.includes("90") ||
+      s.includes("144") ||
+      s.includes("180") ||
+      s.includes("360")
+    );
+    if (isMaj ||
+      rs.length >= 2 ||
+      keyHit) {
+      const d = k - lastI;
+      hits.push({
+        targetIndex: k,
+        estDate: addDays(
+          lastD,
+          d * meta.days
+        ),
+        reasons: rs,
+        strength: rs.length,
+        isMajor: isMaj
+      });
+    }
+  }
+  return hits;
+}
+
+function calcFibs(candles, swings) {
+  const sub = candles.slice(-260);
+  const hi = Math.max(
+    ...sub.map(c => c.high)
+  );
+  const lo = Math.min(
+    ...sub.map(c => c.low)
+  );
+  const sp = hi - lo;
+  const rs = [
+    0.236, 0.382, 0.5,
+    0.618, 0.786, 1.272
+  ];
+  const mPrices = [];
+  if (swings.length >= 2) {
+    const a =
+      swings[swings.length - 2];
+    const b =
+      swings[swings.length - 1];
+    const mHi = Math.max(
+      a.price,
+      b.price
+    );
+    const mLo = Math.min(
+      a.price,
+      b.price
+    );
+    for (const r of rs) {
+      mPrices.push(
+        mHi - (mHi - mLo) * r
+      );
+    }
+  }
+  return rs.map(r => {
+    const p = hi - sp * r;
+    const conf = mPrices.some(mp =>
+      Math.abs(mp - p) /
+        Math.max(1, p) < 0.018
+    );
+    return {
+      ratio: r,
+      label: "黃金" +
+        Math.round(r * 1000),
+      price: p,
+      isConf: conf
+    };
+  });
+}
+
+function calcPctGrid(candles) {
+  const sub = candles.slice(-260);
+  const hi = Math.max(
+    ...sub.map(c => c.high)
+  );
+  const lo = Math.min(
+    ...sub.map(c => c.low)
+  );
+  const sp = hi - lo;
+  const specs = [
+    [0.125, "1/8(12.5%)", false],
+    [0.25, "2/8(25%)", true],
+    [1 / 3, "1/3(33.3%)", true],
+    [0.375, "3/8(37.5%)", false],
+    [0.5, "4/8(50%中軸)", true],
+    [0.625, "5/8(62.5%)", false],
+    [2 / 3, "2/3(66.7%)", true],
+    [0.75, "6/8(75%)", true],
+    [0.875, "7/8(87.5%)", false]
+  ];
+  return specs.map(([r, l, m]) => ({
+    ratio: r,
+    label: l,
+    price: lo + sp * r,
+    isMajor: m
+  }));
+}
+
+function detectHarmonic(
+  candles,
+  swings,
+  iv
+) {
+  const n = swings.length;
+  if (n < 4) return null;
+  const lastI = candles.length - 1;
+  const lastD = candles[lastI].date;
+  const step = intvMeta(iv).days;
+
+  if (n >= 5) {
+    const x = swings[n - 5];
+    const a = swings[n - 4];
+    const b = swings[n - 3];
+    const c = swings[n - 2];
+    const d = swings[n - 1];
+    const xa = Math.abs(
+      a.price - x.price
+    );
+    const ab = Math.abs(
+      b.price - a.price
+    );
+    const ad = Math.abs(
+      d.price - a.price
+    );
+    if (xa > 0 && ab > 0) {
+      const rAb = ab / xa;
+      const rAd = ad / xa;
+      const bull =
+        !x.isHigh && a.isHigh;
+      let nm = "";
+      if (rAb >= 0.35 &&
+        rAb <= 0.54 &&
+        rAd >= 0.82 &&
+        rAd <= 0.94) {
+        nm = bull
+          ? "看漲蝙蝠形態"
+          : "看跌蝙蝠形態";
+      } else if (rAb >= 0.55 &&
+        rAb <= 0.68 &&
+        rAd >= 0.73 &&
+        rAd <= 0.84) {
+        nm = bull
+          ? "看漲伽利222"
+          : "看跌伽利222";
+      }
+      if (nm) {
+        return {
+          name: nm,
+          bull,
+          done: true,
+          nodes: [
+            { l: "X", ...x },
+            { l: "A", ...a },
+            { l: "B", ...b },
+            { l: "C", ...c },
+            { l: "D", ...d }
+          ],
+          przLo: d.price * 0.99,
+          przHi: d.price * 1.01,
+          dDate: d.date
+        };
+      }
+    }
+  }
+
+  const x = swings[n - 4];
+  const a = swings[n - 3];
+  const b = swings[n - 2];
+  const c = swings[n - 1];
+  const xa = Math.abs(
+    a.price - x.price
+  );
+  const ab = Math.abs(
+    b.price - a.price
+  );
+  if (xa <= 0 || ab <= 0) {
+    return null;
+  }
+  const rAb = ab / xa;
+  const bull = !x.isHigh && a.isHigh;
+  const sign = bull ? -1 : 1;
+  let nm = bull
+    ? "潛在看漲ABCD"
+    : "潛在看跌ABCD";
+  let tr = 0.786;
+  if (rAb >= 0.35 && rAb <= 0.54) {
+    nm = bull
+      ? "潛在看漲蝙蝠222"
+      : "潛在看跌蝙蝠222";
+    tr = 0.886;
+  } else if (rAb >= 0.55 &&
+    rAb <= 0.72) {
+    nm = bull
+      ? "潛在看漲伽利222"
+      : "潛在看跌伽利222";
+    tr = 0.786;
+  }
+  const dP = Math.max(
+    0.01,
+    a.price + sign * xa * tr
+  );
+  const abB = Math.max(
+    3,
+    b.index - a.index
+  );
+  const tI = Math.max(
+    lastI + 1,
+    c.index + abB
+  );
+  const dDt = addDays(
+    lastD,
+    (tI - lastI) * step
+  );
+  return {
+    name: nm,
+    bull,
+    done: false,
+    nodes: [
+      { l: "X", ...x },
+      { l: "A", ...a },
+      { l: "B", ...b },
+      { l: "C", ...c },
+      {
+        l: "D",
+        index: tI,
+        price: dP,
+        date: dDt
+      }
+    ],
+    przLo: dP * 0.985,
+    przHi: dP * 1.015,
+    dDate: dDt
+  };
+}
+
+function runAnalysis() {
+  const cs = st.candles;
+  if (cs.length < 20) return;
+  const swings = detectSwings(cs);
+  const anc = pickAnchor(
+    cs,
+    swings,
+    st.customAnc
+  );
+  const isUp = !anc.isHigh;
+  const bVol = calcVol(
+    cs,
+    anc,
+    swings
+  );
+  const vol = Math.max(
+    0.0001,
+    bVol * st.volMult
+  );
+  const lastI = cs.length - 1;
+  const endI = lastI + st.horizon;
+  const rays = buildRays(
+    anc,
+    isUp,
+    vol,
+    endI
+  );
+  const hits = calcTimeHits(
+    cs,
+    anc,
+    swings,
+    st.horizon,
+    st.interval
+  );
+  const fibs = calcFibs(cs, swings);
+  const pcts = calcPctGrid(cs);
+  const harm = detectHarmonic(
+    cs,
+    swings,
+    st.interval
+  );
+
+  const last = cs[lastI];
+  const meta = intvMeta(st.interval);
+  const sign = isUp ? 1 : -1;
+  const dtN = last.id - anc.index;
+  const p1 = Math.max(
+    0,
+    anc.price + sign * vol * dtN
+  );
+  const pos = last.close >= p1
+    ? "位於 1x1(45度) 強勢線上方"
+    : "處於 1x1(45度) 弱勢線下方";
+  const titleF = st.name
+    ? st.code + " " + st.name
+    : st.code;
+
+  const lines = [];
+  lines.push("【江恩時空推演報告】");
+  lines.push("標的：" + titleF);
+  lines.push(
+    "維度：" + meta.t +
+    " | 現價：" + fmt(last.close)
+  );
+  lines.push(
+    "起點：" + fmtDate(anc.date) +
+    " (" + fmt(anc.price) + ")"
+  );
+  lines.push(
+    "角度方向：" +
+    (isUp ? "上升" : "下跌") +
+    "江恩線"
+  );
+  lines.push(
+    "波動率：" + fmt(vol) +
+    "/" + meta.u
+  );
+  lines.push(
+    "1x1主線現值：" + fmt(p1)
+  );
+  lines.push("強弱診斷：" + pos);
+  lines.push("");
+  lines.push(
+    "【大級別圓周與轉勢窗口】"
+  );
+
+  const majs = hits.filter(
+    h => h.isMajor
+  );
+  const showH = majs.length > 0
+    ? majs.slice(0, 3)
+    : hits.slice(0, 3);
+
+  if (showH.length === 0) {
+    lines.push(
+      "延伸期內暫無重大轉勢共振"
+    );
+  } else {
+    for (const h of showH) {
+      const dtF =
+        h.targetIndex - anc.index;
+      const t1 = Math.max(
+        0,
+        anc.price + sign * vol * dtF
+      );
+      const t2 = Math.max(
+        0,
+        anc.price +
+          sign * vol * 2 * dtF
+      );
+      const t3 = Math.max(
+        0,
+        anc.price +
+          sign * vol * 0.5 * dtF
+      );
+      const tag = h.isMajor
+        ? "★大周期轉折："
+        : "轉勢日：";
+      lines.push(
+        tag + fmtDate(h.estDate)
+      );
+      lines.push(
+        "共振因數：" +
+        h.reasons.join("+")
+      );
+      lines.push(
+        "屆時1x1目標價：" + fmt(t1)
+      );
+      lines.push(
+        "強弱區間：" + fmt(t3) +
+        " ~ " + fmt(t2)
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push(
+    "【江恩八分位價格網格】"
+  );
+  for (const p of pcts) {
+    if (p.isMajor) {
+      lines.push(
+        p.label + "：" + fmt(p.price)
+      );
+    }
+  }
+
+  lines.push("");
+  lines.push("【黃金比率匯聚位】");
+  const confs = fibs.filter(
+    f => f.isConf
+  );
+  const showF = confs.length > 0
+    ? confs : fibs.slice(0, 3);
+  for (const f of showF) {
+    const tg = f.isConf
+      ? " (雙重匯聚)" : "";
+    lines.push(
+      f.label + "：" +
+      fmt(f.price) + tg
+    );
+  }
+
+  lines.push("");
+  lines.push("【和諧形態掃描】");
+  if (harm) {
+    const stTxt = harm.done
+      ? "已成型反轉" : "推演完成中";
+    lines.push(
+      "形態：" + harm.name +
+      "(" + stTxt + ")"
+    );
+    lines.push(
+      "D點轉勢窗口：" +
+      fmtDate(harm.dDate)
+    );
+    lines.push(
+      "目標反轉區：" +
+      fmt(harm.przLo) + " ~ " +
+      fmt(harm.przHi)
+    );
+  } else {
+    lines.push(
+      "目前波段尚未構成標準XABCD"
+    );
+  }
+
+  lines.push("");
+  lines.push("【江恩24條鐵律風控】");
+  const spPct = isUp ? 0.96 : 1.04;
+  lines.push(
+    "建議止損參考(4%)：" +
+    fmt(last.close * spPct)
+  );
+  lines.push(
+    "資金控管：單筆不超總資金10%"
+  );
+
+  st.res = {
+    anc,
+    isUp,
+    vol,
+    rays,
+    hits,
+    fibs,
+    pcts,
+    harm,
+    report: lines.join("\n")
+  };
+  updateCards();
+  drawChart();
+}
+
+function updateCards() {
+  const r = st.res;
+  if (!r) return;
+  const titleF = st.name
+    ? st.code + " " + st.name
+    : st.code;
+  document.getElementById(
+    "repTitle"
+  ).textContent =
+    titleF + " 江恩策略建議";
+  document.getElementById(
+    "repBody"
+  ).textContent = r.report;
+
+  const maj = r.hits.find(
+    h => h.isMajor
+  );
+  const hit = maj || r.hits[0];
+  const badge = document.getElementById(
+    "turnBadge"
+  );
+  if (hit) {
+    badge.style.display =
+      hit.isMajor ? "block" : "none";
+    document.getElementById(
+      "turnDate"
+    ).textContent =
+      "預計日期：" +
+      fmtDate(hit.estDate);
+    document.getElementById(
+      "turnWhy"
+    ).textContent =
+      "共振原因：" +
+      hit.reasons.join(" + ");
+    const dt =
+      hit.targetIndex - r.anc.index;
+    const s = r.isUp ? 1 : -1;
+    const p1 = Math.max(
+      0,
+      r.anc.price + s * r.vol * dt
+    );
+    document.getElementById(
+      "turnPrice"
+    ).textContent =
+      "屆時 1x1 目標價：" + fmt(p1);
+  } else {
+    badge.style.display = "none";
+    document.getElementById(
+      "turnDate"
+    ).textContent = "暫無強共振";
+    document.getElementById(
+      "turnWhy"
+    ).textContent =
+      "可拉長上方延伸期數觀察";
+    document.getElementById(
+      "turnPrice"
+    ).textContent = "--";
+  }
+
+  if (r.harm) {
+    document.getElementById(
+      "harmName"
+    ).textContent =
+      "形態：" + r.harm.name;
+    document.getElementById(
+      "harmDate"
+    ).textContent =
+      "D點時間窗口：" +
+      fmtDate(r.harm.dDate);
+    document.getElementById(
+      "harmPrz"
+    ).textContent =
+      "反轉目標區：" +
+      fmt(r.harm.przLo) + " ~ " +
+      fmt(r.harm.przHi);
+  } else {
+    document.getElementById(
+      "harmName"
+    ).textContent = "暫無標準形態";
+    document.getElementById(
+      "harmDate"
+    ).textContent = "--";
+    document.getElementById(
+      "harmPrz"
+    ).textContent = "--";
+  }
+}
+
+function getVisRange() {
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  const endB = Math.max(
+    Math.min(maxE, winL),
+    maxE - st.panOff
+  );
+  const startB = Math.max(
+    0,
+    endB - winL
+  );
+  const endH = Math.min(
+    endB,
+    lastH
+  );
+  return { startB, endH, endB };
+}
+
+function drawChart() {
+  const cv =
+    document.getElementById("cv");
+  const wrap =
+    document.getElementById("cWrap");
+  const dpr =
+    window.devicePixelRatio || 1;
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  cv.width = w * dpr;
+  cv.height = h * dpr;
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = "#0e1118";
+  ctx.fillRect(0, 0, w, h);
+
+  const cs = st.candles;
+  if (cs.length === 0) return;
+  const {
+    startB,
+    endH,
+    endB
+  } = getVisRange();
+  const lastH = cs.length - 1;
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = startB; i <= endH; i++) {
+    lo = Math.min(lo, cs[i].low);
+    hi = Math.max(hi, cs[i].high);
+  }
+  const r = st.res;
+  if (st.panOff === 0 && r) {
+    const r1 = r.rays.find(
+      x => x.isPrimary
+    );
+    if (r1) {
+      const p = r1.pts[1].price;
+      if (p > 0 && p < hi * 2.2) {
+        hi = Math.max(hi, p);
+        lo = Math.min(lo, p);
+      }
+    }
+    if (st.showHarm && r.harm) {
+      lo = Math.min(lo, r.harm.przLo);
+      hi = Math.max(hi, r.harm.przHi);
+    }
+  }
+  if (hi <= lo) hi = lo + 1;
+  const pad = (hi - lo) * 0.08;
+  const minP = Math.max(0, lo - pad);
+  const maxP = hi + pad;
+
+  const spanX = Math.max(
+    1,
+    endB - startB
+  );
+  const useW = Math.max(1, w - 54);
+  const xOf = b =>
+    ((b - startB) / spanX) * useW + 6;
+  const yOf = p =>
+    h - ((p - minP) / (maxP - minP)) *
+      (h - 24) - 12;
+
+  if (lastH >= startB &&
+    lastH <= endB) {
+    const xN = xOf(lastH);
+    ctx.fillStyle =
+      "rgba(59, 130, 246, 0.08)";
+    ctx.fillRect(xN, 0, w - xN, h);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle =
+      "rgba(255,255,255,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(xN, 0);
+    ctx.lineTo(xN, h);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.font = "10px sans-serif";
+
+  if (r && st.showGrid) {
+    for (const lv of r.pcts) {
+      if (lv.price < minP ||
+        lv.price > maxP) continue;
+      const y = yOf(lv.price);
+      const is50 =
+        Math.abs(lv.ratio - 0.5) < 0.01;
+      ctx.save();
+      ctx.setLineDash(
+        is50 ? [6, 3] : [2, 4]
+      );
+      ctx.strokeStyle = is50
+        ? "rgba(250,204,21,0.6)"
+        : (lv.isMajor
+          ? "rgba(99,102,241,0.45)"
+          : "rgba(99,102,241,0.22)");
+      ctx.lineWidth = is50 ? 1.4 : 0.8;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(useW, y);
+      ctx.stroke();
+      ctx.restore();
+      if (lv.isMajor) {
+        ctx.fillStyle = is50
+          ? "#facc15" : "#818cf8";
+        ctx.fillText(
+          lv.label,
+          8,
+          y - 3
+        );
+      }
+    }
+  }
+
+  if (r && st.showFib) {
+    for (const f of r.fibs) {
+      if (f.price < minP ||
+        f.price > maxP) continue;
+      const y = yOf(f.price);
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = f.isConf
+        ? "rgba(192,132,252,0.8)"
+        : "rgba(148,163,184,0.3)";
+      ctx.lineWidth =
+        f.isConf ? 1.5 : 0.8;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(useW, y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  if (r) {
+    for (const hit of r.hits) {
+      const ti = hit.targetIndex;
+      if (ti < startB || ti > endB) {
+        continue;
+      }
+      const x = xOf(ti);
+      const mj = hit.isMajor;
+      const stg = hit.strength >= 2;
+      const col = mj
+        ? "#f472b6"
+        : (stg ? "#fb923c" : "#facc15");
+      ctx.save();
+      if (!mj) ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = mj ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, 16);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = col;
+      const tg = mj
+        ? "◎大周期"
+        : (stg ? "★轉勢" : "轉");
+      ctx.fillText(tg, x - 12, 11);
+    }
+  }
+
+  if (r && st.showHarm && r.harm) {
+    const ns = r.harm.nodes;
+    const pts = ns.map(n => ({
+      x: xOf(n.index),
+      y: yOf(n.price),
+      l: n.l,
+      idx: n.index
+    }));
+    const col = r.harm.bull
+      ? "#34d399" : "#f472b6";
+    ctx.fillStyle = r.harm.bull
+      ? "rgba(52,211,153,0.15)"
+      : "rgba(244,114,182,0.15)";
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    ctx.lineTo(pts[1].x, pts[1].y);
+    ctx.lineTo(pts[2].x, pts[2].y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(pts[2].x, pts[2].y);
+    ctx.lineTo(pts[3].x, pts[3].y);
+    ctx.lineTo(pts[4].x, pts[4].y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.save();
+    if (!r.harm.done) {
+      ctx.setLineDash([4, 3]);
+    }
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 5; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = col;
+    for (const p of pts) {
+      if (p.idx >= startB &&
+        p.idx <= endB) {
+        ctx.fillText(
+          p.l,
+          p.x - 4,
+          p.y - 6
+        );
+      }
+    }
+  }
+
+  if (r) {
+    for (const ray of r.rays) {
+      const p0 = ray.pts[0];
+      const p1 = ray.pts[1];
+      const x0 = xOf(p0.bar);
+      const y0 = yOf(p0.price);
+      const x1 = xOf(p1.bar);
+      const y1 = yOf(p1.price);
+      const is1 = ray.isPrimary;
+      const is2 =
+        ray.name === "2x1" ||
+        ray.name === "1x2";
+      const col = is1
+        ? "#facc15"
+        : (is2
+          ? "rgba(56,189,248,0.75)"
+          : "rgba(45,212,191,0.32)");
+      ctx.strokeStyle = col;
+      ctx.lineWidth = is1 ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      if (p1.price >= minP &&
+        p1.price <= maxP &&
+        p1.bar <= endB) {
+        ctx.fillStyle = col;
+        ctx.fillText(
+          ray.name,
+          x1 + 3,
+          y1 + 3
+        );
+      }
+    }
+  }
+
+  const drawE = Math.min(endB, lastH);
+  const bW = Math.max(
+    2,
+    Math.min(11, (useW / spanX) * 0.65)
+  );
+  if (st.style === "line") {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (
+      let i = startB;
+      i <= drawE;
+      i++
+    ) {
+      const x = xOf(i);
+      const y = yOf(cs[i].close);
+      if (i === startB) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+  } else {
+    for (
+      let i = startB;
+      i <= drawE;
+      i++
+    ) {
+      const c = cs[i];
+      const x = xOf(i);
+      const yH = yOf(c.high);
+      const yL = yOf(c.low);
+      const yO = yOf(c.open);
+      const yC = yOf(c.close);
+      const up = c.close >= c.open;
+      const col = up
+        ? "#22c55e" : "#ef4444";
+      ctx.strokeStyle = col;
+      ctx.fillStyle = col;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, yH);
+      ctx.lineTo(x, yL);
+      ctx.stroke();
+      const topY = Math.min(yO, yC);
+      const bh = Math.max(
+        1.5,
+        Math.abs(yC - yO)
+      );
+      ctx.fillRect(
+        x - bW / 2,
+        topY,
+        bW,
+        bh
+      );
+    }
+  }
+
+  if (r &&
+    r.anc.index >= startB &&
+    r.anc.index <= endB) {
+    const ax = xOf(r.anc.index);
+    const ay = yOf(r.anc.price);
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.arc(ax, ay, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillText(
+      "起點",
+      ax - 10,
+      ay + 15
+    );
+  }
+
+  if (st.selBar != null &&
+    st.selBar >= startB &&
+    st.selBar <= endB) {
+    const sx = xOf(st.selBar);
+    ctx.strokeStyle =
+      "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx, h);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillText(
+    fmt(maxP),
+    useW + 8,
+    14
+  );
+  ctx.fillText(
+    fmt((maxP + minP) / 2),
+    useW + 8,
+    h / 2
+  );
+  ctx.fillText(
+    fmt(minP),
+    useW + 8,
+    h - 6
+  );
+
+  updateHud();
+}
+
+function updateHud() {
+  const cs = st.candles;
+  if (cs.length === 0) return;
+  const lastI = cs.length - 1;
+  const idx = st.selBar ?? lastI;
+  const meta = intvMeta(st.interval);
+  let dStr = "";
+  let pStr = "";
+  if (idx >= 0 && idx <= lastI) {
+    const c = cs[idx];
+    dStr = fmtDate(c.date);
+    pStr = "收 " + fmt(c.close);
+  } else {
+    const diff = idx - lastI;
+    const est = addDays(
+      cs[lastI].date,
+      diff * meta.days
+    );
+    dStr = fmtDate(est) + "(預)";
+    pStr = "未來+" + diff + meta.u;
+  }
+  let gStr = "";
+  if (st.res) {
+    const r = st.res;
+    const dt = idx - r.anc.index;
+    const s = r.isUp ? 1 : -1;
+    const p1 = Math.max(
+      0,
+      r.anc.price + s * r.vol * dt
+    );
+    gStr = " | 1x1:" + fmt(p1);
+  }
+  const nm = st.name
+    ? st.name + " " : "";
+  document.getElementById(
+    "hudTxt"
+  ).textContent =
+    nm + dStr + " " + pStr + gStr;
+
+  const bLat = document.getElementById(
+    "btnLatest"
+  );
+  bLat.style.display =
+    st.panOff > 0 ? "inline-block" : "none";
+
+  const bAnc = document.getElementById(
+    "btnSetAnc"
+  );
+  const validAnc =
+    st.selBar != null &&
+    st.selBar >= 0 &&
+    st.selBar <= lastI;
+  bAnc.style.display =
+    validAnc ? "inline-block" : "none";
+}
+
+function fillPresets() {
+  const sel = document.getElementById(
+    "presetSel"
+  );
+  sel.innerHTML =
+    '<option value="">自選標的</option>';
+  const list = PRESETS.filter(
+    p => p.m === st.market
+  );
+  for (const p of list) {
+    const opt =
+      document.createElement("option");
+    opt.value = p.s;
+    opt.textContent =
+      p.s + " " + p.n;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadSymbol() {
+  const ld =
+    document.getElementById("loadBox");
+  const eb =
+    document.getElementById("errBox");
+  ld.style.display = "flex";
+  eb.style.display = "none";
+  st.customAnc = null;
+  st.selBar = null;
+  st.panOff = 0;
+
+  const raw = document.getElementById(
+    "codeInp"
+  ).value;
+  const sym = normSym(
+    raw,
+    st.market
+  );
+  document.getElementById(
+    "codeInp"
+  ).value = sym;
+  st.code = sym;
+  st.name = NAMES[sym] || "";
+
+  try {
+    const data = await fetchYahoo(
+      sym,
+      st.interval
+    );
+    st.candles = data.candles;
+    if (data.name) st.name = data.name;
+    runAnalysis();
+  } catch (e) {
+    eb.textContent =
+      "報價讀取失敗，請檢查代碼：" +
+      sym;
+    eb.style.display = "block";
+  }
+  ld.style.display = "none";
+}
+
+function bindSeg(id, cb) {
+  const box =
+    document.getElementById(id);
+  const btns =
+    box.querySelectorAll("button");
+  btns.forEach(b => {
+    b.onclick = () => {
+      btns.forEach(x =>
+        x.classList.remove("on")
+      );
+      b.classList.add("on");
+      cb(b.dataset.v);
+    };
+  });
+}
+
+function setSegVal(id, val) {
+  const box =
+    document.getElementById(id);
+  box.querySelectorAll("button")
+    .forEach(b => {
+      b.classList.toggle(
+        "on",
+        b.dataset.v === String(val)
+      );
+    });
+}
+
+function initEvents() {
+  bindSeg("mktSeg", v => {
+    st.market = v;
+    fillPresets();
+    document.getElementById(
+      "codeInp"
+    ).value =
+      v === "hk" ? "^HSI" : "^IXIC";
+    loadSymbol();
+  });
+
+  bindSeg("stySeg", v => {
+    st.style = v;
+    drawChart();
+  });
+
+  bindSeg("intSeg", v => {
+    st.interval = v;
+    loadSymbol();
+  });
+
+  bindSeg("horSeg", v => {
+    st.horizon = Number(v);
+    runAnalysis();
+  });
+
+  document.getElementById(
+    "btnHsi"
+  ).onclick = () => {
+    st.market = "hk";
+    setSegVal("mktSeg", "hk");
+    fillPresets();
+    document.getElementById(
+      "codeInp"
+    ).value = "^HSI";
+    loadSymbol();
+  };
+
+  document.getElementById(
+    "btnIxic"
+  ).onclick = () => {
+    st.market = "us";
+    setSegVal("mktSeg", "us");
+    fillPresets();
+    document.getElementById(
+      "codeInp"
+    ).value = "^IXIC";
+    loadSymbol();
+  };
+
+  document.getElementById(
+    "presetSel"
+  ).onchange = e => {
+    if (e.target.value) {
+      document.getElementById(
+        "codeInp"
+      ).value = e.target.value;
+      loadSymbol();
+    }
+  };
+
+  document.getElementById(
+    "btnGo"
+  ).onclick = loadSymbol;
+
+  document.getElementById(
+    "codeInp"
+  ).onkeydown = e => {
+    if (e.key === "Enter") {
+      loadSymbol();
+    }
+  };
+
+  const tog = (id, key, fn) => {
+    const el =
+      document.getElementById(id);
+    el.onclick = () => {
+      st[key] = !st[key];
+      el.classList.toggle(
+        "on",
+        st[key]
+      );
+      fn();
+    };
+  };
+  tog("togGrid", "showGrid", drawChart);
+  tog("togFib", "showFib", drawChart);
+  tog("togHarm", "showHarm", drawChart);
+
+  const updVol = () => {
+    document.getElementById(
+      "volLbl"
+    ).textContent =
+      "波動率:" +
+      st.volMult.toFixed(1) + "x";
+    runAnalysis();
+  };
+  document.getElementById(
+    "volDn"
+  ).onclick = () => {
+    st.volMult = Math.max(
+      0.4,
+      st.volMult - 0.1
+    );
+    updVol();
+  };
+  document.getElementById(
+    "volUp"
+  ).onclick = () => {
+    st.volMult = Math.min(
+      2.5,
+      st.volMult + 0.1
+    );
+    updVol();
+  };
+
+  const bMode =
+    document.getElementById("btnMode");
+  bMode.onclick = () => {
+    st.scrub = !st.scrub;
+    bMode.textContent = st.scrub
+      ? "查價中" : "拖動歷史";
+    bMode.classList.toggle(
+      "btn-hi",
+      st.scrub
+    );
+  };
+
+  document.getElementById(
+    "btnLatest"
+  ).onclick = () => {
+    st.panOff = 0;
+    drawChart();
+  };
+
+  document.getElementById(
+    "btnZoomIn"
+  ).onclick = () => {
+    st.histBars = Math.max(
+      45,
+      st.histBars - 30
+    );
+    drawChart();
+  };
+  document.getElementById(
+    "btnZoomOut"
+  ).onclick = () => {
+    st.histBars = Math.min(
+      360,
+      st.histBars + 30
+    );
+    drawChart();
+  };
+
+  document.getElementById(
+    "btnSetAnc"
+  ).onclick = () => {
+    if (st.selBar != null) {
+      st.customAnc = st.selBar;
+      runAnalysis();
+    }
+  };
+  document.getElementById(
+    "btnAutoAnc"
+  ).onclick = () => {
+    st.customAnc = null;
+    st.selBar = null;
+    runAnalysis();
+  };
+
+  document.getElementById(
+    "btnCopy"
+  ).onclick = () => {
+    if (!st.res) return;
+    navigator.clipboard.writeText(
+      st.res.report
+    );
+    const b = document.getElementById(
+      "btnCopy"
+    );
+    b.textContent = "已複製";
+    setTimeout(() => {
+      b.textContent = "複製報告";
+    }, 1500);
+  };
+
+  const cv =
+    document.getElementById("cv");
+  let dragging = false;
+  let moved = false;
+  let downX = 0;
+  let basePan = 0;
+
+  const barAt = clientX => {
+    const rect =
+      cv.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const {
+      startB,
+      endB
+    } = getVisRange();
+    const span = Math.max(
+      1,
+      endB - startB
+    );
+    const useW = Math.max(
+      1,
+      rect.width - 54
+    );
+    const r = (x - 6) / useW;
+    const off = Math.round(r * span);
+    return Math.max(
+      startB,
+      Math.min(endB, startB + off)
+    );
+  };
+
+  cv.onpointerdown = e => {
+    dragging = true;
+    moved = false;
+    downX = e.clientX;
+    basePan = st.panOff;
+    cv.setPointerCapture(e.pointerId);
+  };
+
+  cv.onpointermove = e => {
+    if (!dragging) return;
+    const dx = e.clientX - downX;
+    if (Math.abs(dx) > 4) {
+      moved = true;
+    }
+    if (st.scrub) {
+      st.selBar = barAt(e.clientX);
+      drawChart();
+      return;
+    }
+    if (!moved) return;
+    const rect =
+      cv.getBoundingClientRect();
+    const {
+      startB,
+      endB
+    } = getVisRange();
+    const span = Math.max(
+      1,
+      endB - startB
+    );
+    const useW = Math.max(
+      1,
+      rect.width - 54
+    );
+    const dBars = Math.round(
+      (dx / useW) * span
+    );
+    const lastH = Math.max(
+      0,
+      st.candles.length - 1
+    );
+    const maxE = lastH + st.horizon;
+    const winL =
+      st.histBars + st.horizon;
+    const maxP = Math.max(
+      0,
+      maxE - winL
+    );
+    st.panOff = Math.max(
+      0,
+      Math.min(maxP, basePan + dBars)
+    );
+    drawChart();
+  };
+
+  cv.onpointerup = e => {
+    if (!dragging) return;
+    dragging = false;
+    if (!moved) {
+      st.selBar = barAt(e.clientX);
+      drawChart();
+    }
+  };
+
+  cv.onwheel = e => {
+    e.preventDefault();
+    const step =
+      e.deltaY > 0 ? 20 : -20;
+    st.histBars = Math.max(
+      45,
+      Math.min(
+        360,
+        st.histBars + step
+      )
+    );
+    drawChart();
+  };
+
+  const ro = new ResizeObserver(() => {
+    drawChart();
+  });
+  ro.observe(
+    document.getElementById("cWrap")
+  );
+}
+
+fillPresets();
+initEvents();
+loadSymbol();
+</script>
+</body>
+</html>
