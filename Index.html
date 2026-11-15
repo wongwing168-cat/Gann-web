@@ -288,6 +288,16 @@ canvas {
       <button
         data-v="252">252期</button>
     </div>
+    <span class="lbl">方向:</span>
+    <div class="seg" id="dirSeg">
+      <button
+        class="on"
+        data-v="auto">自動</button>
+      <button
+        data-v="up">向上</button>
+      <button
+        data-v="down">向下</button>
+    </div>
     <button
       class="btn on"
       id="togGrid">八分網格</button>
@@ -300,7 +310,7 @@ canvas {
     <div class="sp"></div>
     <span
       class="lbl"
-      id="volLbl">波動率:1.0x</span>
+      id="volLbl">波動:1.0x</span>
     <button
       class="btn"
       id="volDn">-</button>
@@ -456,6 +466,7 @@ const st = {
   style: "candle",
   interval: "1wk",
   horizon: 60,
+  dir: "auto",
   candles: [],
   res: null,
   customAnc: null,
@@ -467,7 +478,8 @@ const st = {
   histBars: 120,
   panOff: 0,
   moveLine: true,
-  reqId: 0
+  reqId: 0,
+  pillBox: null
 };
 
 function fmt(v) {
@@ -808,14 +820,22 @@ function detectSwings(candles) {
 function pickAnchor(
   candles,
   swings,
-  customIdx
+  customIdx,
+  dir
 ) {
   if (customIdx != null &&
     customIdx >= 0 &&
     customIdx < candles.length) {
     const c = candles[customIdx];
-    const mid = (c.high + c.low) / 2;
-    const isH = c.close < mid;
+    let isH = false;
+    if (dir === "up") {
+      isH = false;
+    } else if (dir === "down") {
+      isH = true;
+    } else {
+      const mid = (c.high + c.low) / 2;
+      isH = c.close < mid;
+    }
     return {
       index: customIdx,
       date: c.date,
@@ -832,8 +852,41 @@ function pickAnchor(
     s.index >= start &&
     s.index < candles.length - 5
   );
-  if (rec.length > 0) {
+  if (dir === "up") {
+    const lows = rec.filter(
+      s => !s.isHigh
+    );
+    if (lows.length > 0) {
+      return lows[lows.length - 1];
+    }
+  } else if (dir === "down") {
+    const highs = rec.filter(
+      s => s.isHigh
+    );
+    if (highs.length > 0) {
+      return highs[highs.length - 1];
+    }
+  } else if (rec.length > 0) {
     return rec[rec.length - 1];
+  }
+
+  if (dir === "down") {
+    let maxC = candles[start];
+    for (
+      let i = start;
+      i < candles.length;
+      i++
+    ) {
+      if (candles[i].high > maxC.high) {
+        maxC = candles[i];
+      }
+    }
+    return {
+      index: maxC.id,
+      date: maxC.date,
+      price: maxC.high,
+      isHigh: true
+    };
   }
   let minC = candles[start];
   for (
@@ -1303,9 +1356,13 @@ function runAnalysis() {
   const anc = pickAnchor(
     cs,
     swings,
-    st.customAnc
+    st.customAnc,
+    st.dir
   );
-  const isUp = !anc.isHigh;
+  let isUp = !anc.isHigh;
+  if (st.dir === "up") isUp = true;
+  if (st.dir === "down") isUp = false;
+
   const bVol = calcVol(
     cs,
     anc,
@@ -1352,6 +1409,10 @@ function runAnalysis() {
   const titleF = st.name
     ? st.code + " " + st.name
     : st.code;
+  const dirLbl = st.dir === "up"
+    ? "向上"
+    : (st.dir === "down"
+      ? "向下" : "自動");
 
   const lines = [];
   lines.push("【江恩時空推演報告】");
@@ -1367,7 +1428,7 @@ function runAnalysis() {
   lines.push(
     "角度方向：" +
     (isUp ? "上升" : "下跌") +
-    "江恩線"
+    "江恩線(" + dirLbl + ")"
   );
   lines.push(
     "波動率：" + fmt(vol) +
@@ -1620,6 +1681,46 @@ function getVisRange() {
   return { startB, endH, endB };
 }
 
+function ensureVisible(bar) {
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  const maxP = Math.max(
+    0,
+    maxE - winL
+  );
+  const { startB, endB } = getVisRange();
+  if (bar < startB) {
+    st.panOff = Math.min(
+      maxP,
+      st.panOff + (startB - bar)
+    );
+  } else if (bar > endB) {
+    st.panOff = Math.max(
+      0,
+      st.panOff - (bar - endB)
+    );
+  }
+}
+
+function stepBar(delta) {
+  if (st.candles.length === 0) return;
+  const lastH = st.candles.length - 1;
+  const maxE = lastH + st.horizon;
+  const cur = st.selBar ?? lastH;
+  const next = Math.max(
+    0,
+    Math.min(maxE, cur + delta)
+  );
+  st.selBar = next;
+  ensureVisible(next);
+  drawChart();
+}
+
 function drawChart() {
   const cv =
     document.getElementById("cv");
@@ -1647,7 +1748,7 @@ function drawChart() {
   } = getVisRange();
   const lastH = cs.length - 1;
   const rightW = 58;
-  const botH = 26;
+  const botH = 30;
   const plotW = Math.max(
     1,
     w - rightW
@@ -1737,7 +1838,7 @@ function drawChart() {
       ctx.fillText(
         dl,
         x - 14,
-        plotH + 17
+        plotH + 19
       );
     }
   }
@@ -1979,10 +2080,30 @@ function drawChart() {
     ) {
       const c = cs[i];
       const x = xOf(i);
-      const yH = yOf(c.high);
-      const yL = yOf(c.low);
-      const yO = yOf(c.open);
-      const yC = yOf(c.close);
+      const yH = yForPrice(
+        c.high,
+        plotH,
+        minP,
+        maxP
+      );
+      const yL = yForPrice(
+        c.low,
+        plotH,
+        minP,
+        maxP
+      );
+      const yO = yForPrice(
+        c.open,
+        plotH,
+        minP,
+        maxP
+      );
+      const yC = yForPrice(
+        c.close,
+        plotH,
+        minP,
+        maxP
+      );
       const up = c.close >= c.open;
       const col = up
         ? "#22c55e" : "#ef4444";
@@ -2088,8 +2209,8 @@ function drawChart() {
   }
 
   const dStr = fullDateAtBar(actBar);
-  const hTxt = "◀ " + dStr + " ▶";
-  const hw = 104;
+  const hw = 126;
+  const btnW = 26;
   const hx = Math.max(
     4,
     Math.min(
@@ -2097,24 +2218,63 @@ function drawChart() {
       actX - hw / 2
     )
   );
+  const hy = plotH + 3;
+  const hh = 22;
+
   ctx.fillStyle = pillBg;
-  fillPill(
-    ctx,
-    hx,
-    plotH + 3,
-    hw,
-    20,
-    6
+  fillPill(ctx, hx, hy, hw, hh, 6);
+
+  ctx.strokeStyle =
+    "rgba(9,11,16,0.28)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(hx + btnW, hy + 3);
+  ctx.lineTo(hx + btnW, hy + hh - 3);
+  ctx.moveTo(
+    hx + hw - btnW,
+    hy + 3
   );
+  ctx.lineTo(
+    hx + hw - btnW,
+    hy + hh - 3
+  );
+  ctx.stroke();
+
   ctx.fillStyle = "#090b10";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText("◀", hx + 7, hy + 15);
+  ctx.fillText(
+    "▶",
+    hx + hw - 18,
+    hy + 15
+  );
   ctx.font = "bold 10px sans-serif";
   ctx.fillText(
-    hTxt,
-    hx + 8,
-    plotH + 17
+    dStr,
+    hx + btnW + 7,
+    hy + 15
   );
 
+  st.pillBox = {
+    x: hx,
+    y: hy,
+    w: hw,
+    h: hh,
+    btnW
+  };
+
   updateHud();
+}
+
+function yForPrice(
+  p,
+  plotH,
+  minP,
+  maxP
+) {
+  return plotH -
+    ((p - minP) / (maxP - minP)) *
+    (plotH - 16) - 8;
 }
 
 function updateHud() {
@@ -2292,6 +2452,11 @@ function initEvents() {
     runAnalysis();
   });
 
+  bindSeg("dirSeg", v => {
+    st.dir = v;
+    runAnalysis();
+  });
+
   document.getElementById(
     "btnHsi"
   ).onclick = () => {
@@ -2359,7 +2524,7 @@ function initEvents() {
     document.getElementById(
       "volLbl"
     ).textContent =
-      "波動率:" +
+      "波動:" +
       st.volMult.toFixed(1) + "x";
     runAnalysis();
   };
@@ -2488,10 +2653,34 @@ function initEvents() {
     );
   };
 
+  const checkPillBtn = (x, y) => {
+    const b = st.pillBox;
+    if (!b) return 0;
+    if (y < b.y - 6 ||
+      y > b.y + b.h + 6) {
+      return 0;
+    }
+    if (x >= b.x - 4 &&
+      x <= b.x + b.btnW + 2) {
+      return -1;
+    }
+    if (x >= b.x + b.w - b.btnW - 2 &&
+      x <= b.x + b.w + 4) {
+      return 1;
+    }
+    return 0;
+  };
+
   cv.onpointerdown = e => {
     const rect =
       cv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const stepDir = checkPillBtn(x, y);
+    if (stepDir !== 0) {
+      stepBar(stepDir);
+      return;
+    }
     dragging = true;
     moved = false;
     dragAxis = y >= rect.height - 40;
@@ -2573,6 +2762,24 @@ function initEvents() {
       )
     );
     drawChart();
+  };
+
+  window.onkeydown = e => {
+    const tag = document
+      .activeElement?.tagName;
+    if (tag === "INPUT" ||
+      tag === "SELECT") {
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepBar(-1);
+    } else if (
+      e.key === "ArrowRight"
+    ) {
+      e.preventDefault();
+      stepBar(1);
+    }
   };
 
   const ro = new ResizeObserver(() => {
