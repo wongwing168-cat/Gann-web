@@ -139,7 +139,7 @@ input {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 460px;
+  min-height: 480px;
 }
 .hud {
   display: flex;
@@ -155,7 +155,7 @@ input {
 .c-wrap {
   position: relative;
   flex: 1;
-  min-height: 400px;
+  min-height: 420px;
   touch-action: none;
 }
 canvas {
@@ -319,8 +319,8 @@ canvas {
           id="hudTxt">載入中...</span>
         <div class="sp"></div>
         <button
-          class="btn on"
-          id="btnMode">拖動歷史</button>
+          class="btn btn-hi"
+          id="btnMode">移動時間線</button>
         <button
           class="btn btn-hi"
           id="btnLatest"
@@ -466,12 +466,22 @@ const st = {
   selBar: null,
   histBars: 120,
   panOff: 0,
-  scrub: false,
+  moveLine: true,
   reqId: 0
 };
 
 function fmt(v) {
   return Number(v).toFixed(2);
+}
+
+function fmtAxisP(p) {
+  if (p >= 10000) {
+    return Math.round(p).toString();
+  }
+  if (p >= 1000) {
+    return Number(p).toFixed(1);
+  }
+  return Number(p).toFixed(2);
 }
 
 function fmtDate(d) {
@@ -511,6 +521,60 @@ function intvMeta(iv) {
     days: 1.45,
     u: "日"
   };
+}
+
+function priceAtBar(bar) {
+  const cs = st.candles;
+  if (cs.length === 0) return 0;
+  if (bar >= 0 && bar < cs.length) {
+    return cs[bar].close;
+  }
+  if (st.res) {
+    const r = st.res;
+    const dt = bar - r.anc.index;
+    const s = r.isUp ? 1 : -1;
+    return Math.max(
+      0,
+      r.anc.price + s * r.vol * dt
+    );
+  }
+  return cs[cs.length - 1].close;
+}
+
+function fullDateAtBar(bar) {
+  const cs = st.candles;
+  if (cs.length === 0) return "--";
+  const lastI = cs.length - 1;
+  if (bar >= 0 && bar <= lastI) {
+    return fmtDate(cs[bar].date);
+  }
+  const diff = bar - lastI;
+  const meta = intvMeta(st.interval);
+  const est = addDays(
+    cs[lastI].date,
+    diff * meta.days
+  );
+  return fmtDate(est);
+}
+
+function shortDateAtBar(bar) {
+  const full = fullDateAtBar(bar);
+  if (full.length < 10) return full;
+  if (st.interval === "1mo") {
+    return full.slice(0, 7);
+  }
+  return full.slice(5);
+}
+
+function fillPill(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function normSym(raw, mkt) {
@@ -1582,6 +1646,16 @@ function drawChart() {
     endB
   } = getVisRange();
   const lastH = cs.length - 1;
+  const rightW = 58;
+  const botH = 26;
+  const plotW = Math.max(
+    1,
+    w - rightW
+  );
+  const plotH = Math.max(
+    1,
+    h - botH
+  );
 
   let lo = Infinity;
   let hi = -Infinity;
@@ -1615,31 +1689,90 @@ function drawChart() {
     1,
     endB - startB
   );
-  const useW = Math.max(1, w - 54);
   const xOf = b =>
-    ((b - startB) / spanX) * useW + 6;
+    ((b - startB) / spanX) *
+      (plotW - 12) + 6;
   const yOf = p =>
-    h - ((p - minP) / (maxP - minP)) *
-      (h - 24) - 12;
+    plotH -
+      ((p - minP) / (maxP - minP)) *
+      (plotH - 16) - 8;
+
+  ctx.font = "10px sans-serif";
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 0.7;
+
+  for (let i = 0; i <= 4; i++) {
+    const rt = i / 4;
+    const p = minP +
+      (maxP - minP) * rt;
+    const y = plotH -
+      rt * (plotH - 16) - 8;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(plotW, y);
+    ctx.stroke();
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText(
+      fmtAxisP(p),
+      plotW + 6,
+      y + 3
+    );
+  }
+
+  for (let i = 0; i <= 4; i++) {
+    const bar = Math.round(
+      startB + (spanX * i) / 4
+    );
+    const x = xOf(bar);
+    if (i > 0 && i < 4) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, plotH);
+      ctx.stroke();
+    }
+    if (x >= 18 && x <= plotW - 18) {
+      ctx.fillStyle = "#94a3b8";
+      const dl = shortDateAtBar(bar);
+      ctx.fillText(
+        dl,
+        x - 14,
+        plotH + 17
+      );
+    }
+  }
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, plotH);
+  ctx.lineTo(plotW, plotH);
+  ctx.moveTo(plotW, 0);
+  ctx.lineTo(plotW, plotH);
+  ctx.stroke();
 
   if (lastH >= startB &&
     lastH <= endB) {
     const xN = xOf(lastH);
     ctx.fillStyle =
-      "rgba(59, 130, 246, 0.08)";
-    ctx.fillRect(xN, 0, w - xN, h);
+      "rgba(59,130,246,0.08)";
+    ctx.fillRect(
+      xN,
+      0,
+      plotW - xN,
+      plotH
+    );
     ctx.save();
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle =
       "rgba(255,255,255,0.35)";
     ctx.beginPath();
     ctx.moveTo(xN, 0);
-    ctx.lineTo(xN, h);
+    ctx.lineTo(xN, plotH);
     ctx.stroke();
     ctx.restore();
   }
-
-  ctx.font = "10px sans-serif";
 
   if (r && st.showGrid) {
     for (const lv of r.pcts) {
@@ -1660,7 +1793,7 @@ function drawChart() {
       ctx.lineWidth = is50 ? 1.4 : 0.8;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(useW, y);
+      ctx.lineTo(plotW, y);
       ctx.stroke();
       ctx.restore();
       if (lv.isMajor) {
@@ -1689,7 +1822,7 @@ function drawChart() {
         f.isConf ? 1.5 : 0.8;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(useW, y);
+      ctx.lineTo(plotW, y);
       ctx.stroke();
       ctx.restore();
     }
@@ -1713,7 +1846,7 @@ function drawChart() {
       ctx.lineWidth = mj ? 2 : 1.2;
       ctx.beginPath();
       ctx.moveTo(x, 16);
-      ctx.lineTo(x, h);
+      ctx.lineTo(x, plotH);
       ctx.stroke();
       ctx.restore();
       ctx.fillStyle = col;
@@ -1808,8 +1941,8 @@ function drawChart() {
         ctx.fillStyle = col;
         ctx.fillText(
           ray.name,
-          x1 + 3,
-          y1 + 3
+          plotW - 22,
+          y1 - 3
         );
       }
     }
@@ -1818,7 +1951,7 @@ function drawChart() {
   const drawE = Math.min(endB, lastH);
   const bW = Math.max(
     2,
-    Math.min(11, (useW / spanX) * 0.65)
+    Math.min(11, (plotW / spanX) * 0.65)
   );
   if (st.style === "line") {
     ctx.strokeStyle = "#ffffff";
@@ -1890,34 +2023,95 @@ function drawChart() {
     );
   }
 
-  if (st.selBar != null &&
-    st.selBar >= startB &&
-    st.selBar <= endB) {
-    const sx = xOf(st.selBar);
-    ctx.strokeStyle =
-      "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 1;
+  const rawAct = st.selBar ?? lastH;
+  const actBar = Math.max(
+    startB,
+    Math.min(endB, rawAct)
+  );
+  const actX = xOf(actBar);
+  const actP = priceAtBar(actBar);
+  const actY = yOf(actP);
+  const isFut = actBar > lastH;
+  const pillBg = isFut
+    ? "#fb923c" : "#22d3ee";
+
+  ctx.strokeStyle = pillBg;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(actX, 0);
+  ctx.lineTo(actX, plotH);
+  ctx.stroke();
+
+  if (actP >= minP && actP <= maxP) {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = isFut
+      ? "rgba(251,146,60,0.6)"
+      : "rgba(34,211,238,0.6)";
     ctx.beginPath();
-    ctx.moveTo(sx, 0);
-    ctx.lineTo(sx, h);
+    ctx.moveTo(0, actY);
+    ctx.lineTo(plotW, actY);
     ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = pillBg;
+    ctx.beginPath();
+    ctx.arc(
+      actX,
+      actY,
+      4,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    const py = Math.max(
+      2,
+      Math.min(plotH - 20, actY - 9)
+    );
+    fillPill(
+      ctx,
+      plotW + 3,
+      py,
+      rightW - 6,
+      18,
+      4
+    );
+    ctx.fillStyle = "#090b10";
+    ctx.font =
+      "bold 10px sans-serif";
+    ctx.fillText(
+      fmtAxisP(actP),
+      plotW + 6,
+      py + 12
+    );
   }
 
-  ctx.fillStyle = "#94a3b8";
-  ctx.fillText(
-    fmt(maxP),
-    useW + 8,
-    14
+  const dStr = fullDateAtBar(actBar);
+  const hTxt = "◀ " + dStr + " ▶";
+  const hw = 104;
+  const hx = Math.max(
+    4,
+    Math.min(
+      plotW - hw - 4,
+      actX - hw / 2
+    )
   );
-  ctx.fillText(
-    fmt((maxP + minP) / 2),
-    useW + 8,
-    h / 2
+  ctx.fillStyle = pillBg;
+  fillPill(
+    ctx,
+    hx,
+    plotH + 3,
+    hw,
+    20,
+    6
   );
+  ctx.fillStyle = "#090b10";
+  ctx.font = "bold 10px sans-serif";
   ctx.fillText(
-    fmt(minP),
-    useW + 8,
-    h - 6
+    hTxt,
+    hx + 8,
+    plotH + 17
   );
 
   updateHud();
@@ -2191,12 +2385,16 @@ function initEvents() {
   const bMode =
     document.getElementById("btnMode");
   bMode.onclick = () => {
-    st.scrub = !st.scrub;
-    bMode.textContent = st.scrub
-      ? "查價中" : "拖動歷史";
+    st.moveLine = !st.moveLine;
+    bMode.textContent = st.moveLine
+      ? "移動時間線" : "拖動歷史";
     bMode.classList.toggle(
       "btn-hi",
-      st.scrub
+      st.moveLine
+    );
+    bMode.classList.toggle(
+      "on",
+      !st.moveLine
     );
   };
 
@@ -2262,6 +2460,7 @@ function initEvents() {
     document.getElementById("cv");
   let dragging = false;
   let moved = false;
+  let dragAxis = false;
   let downX = 0;
   let basePan = 0;
 
@@ -2279,7 +2478,7 @@ function initEvents() {
     );
     const useW = Math.max(
       1,
-      rect.width - 54
+      rect.width - 58 - 12
     );
     const r = (x - 6) / useW;
     const off = Math.round(r * span);
@@ -2290,11 +2489,19 @@ function initEvents() {
   };
 
   cv.onpointerdown = e => {
+    const rect =
+      cv.getBoundingClientRect();
+    const y = e.clientY - rect.top;
     dragging = true;
     moved = false;
+    dragAxis = y >= rect.height - 40;
     downX = e.clientX;
     basePan = st.panOff;
     cv.setPointerCapture(e.pointerId);
+    if (st.moveLine || dragAxis) {
+      st.selBar = barAt(e.clientX);
+      drawChart();
+    }
   };
 
   cv.onpointermove = e => {
@@ -2303,7 +2510,7 @@ function initEvents() {
     if (Math.abs(dx) > 4) {
       moved = true;
     }
-    if (st.scrub) {
+    if (st.moveLine || dragAxis) {
       st.selBar = barAt(e.clientX);
       drawChart();
       return;
@@ -2321,7 +2528,7 @@ function initEvents() {
     );
     const useW = Math.max(
       1,
-      rect.width - 54
+      rect.width - 58 - 12
     );
     const dBars = Math.round(
       (dx / useW) * span
@@ -2347,6 +2554,7 @@ function initEvents() {
   cv.onpointerup = e => {
     if (!dragging) return;
     dragging = false;
+    dragAxis = false;
     if (!moved) {
       st.selBar = barAt(e.clientX);
       drawChart();
