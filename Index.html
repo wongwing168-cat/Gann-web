@@ -109,6 +109,13 @@ input {
   font-size: 12px;
   color: #94a3b8;
 }
+.src-tag {
+  font-size: 11px;
+  color: #34d399;
+  background: #064e3b;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
 .sp {
   flex: 1;
 }
@@ -119,6 +126,10 @@ input {
   border-radius: 8px;
   font-size: 12px;
   display: none;
+}
+.warn {
+  background: #78350f;
+  color: #fde68a;
 }
 .main {
   display: grid;
@@ -168,7 +179,7 @@ canvas {
 .load {
   position: absolute;
   inset: 0;
-  background: rgba(9, 11, 16, 0.75);
+  background: rgba(9, 11, 16, 0.78);
   display: none;
   align-items: center;
   justify-content: center;
@@ -254,6 +265,9 @@ canvas {
     <button
       class="btn btn-hi"
       id="btnGo">分析</button>
+    <span
+      class="src-tag"
+      id="srcTag">線路就緒</span>
     <div class="sp"></div>
     <div class="seg" id="stySeg">
       <button
@@ -360,7 +374,7 @@ canvas {
         <div
           class="load"
           id="loadBox">
-          抓取報價中...
+          切換線路抓取報價中...
         </div>
       </div>
     </div>
@@ -619,50 +633,90 @@ async function fetchYahoo(sym, iv) {
   if (iv === "1wk") rng = "15y";
   if (iv === "1mo") rng = "max";
   const enc = encodeURIComponent(sym);
-  const base =
-    "https://query1.finance.yahoo.com";
-  const path =
-    "/v8/finance/chart/" + enc;
-  const q = "?range=" + rng +
+  const q1 =
+    "https://query1.finance.yahoo.com" +
+    "/v8/finance/chart/" + enc +
+    "?range=" + rng +
     "&interval=" + iv;
-  const target = base + path + q;
-  const encT =
-    encodeURIComponent(target);
+  const q2 =
+    "https://query2.finance.yahoo.com" +
+    "/v8/finance/chart/" + enc +
+    "?range=5y&interval=" + iv;
+  const enc1 = encodeURIComponent(q1);
+  const enc2 = encodeURIComponent(q2);
 
-  const proxies = [
-    "/.netlify/functions/yahoo" +
-      "?symbol=" + enc +
-      "&interval=" + iv +
-      "&range=" + rng,
-    "https://api.codetabs.com" +
-      "/v1/proxy?quest=" + encT,
-    "https://corsproxy.io/?" + encT
+  const routes = [
+    {
+      name: "雲端直連(Yahoo/Stooq)",
+      ms: 14000,
+      url:
+        "/.netlify/functions/yahoo" +
+        "?symbol=" + enc +
+        "&interval=" + iv +
+        "&range=" + rng
+    },
+    {
+      name: "代理節點2 (AllOrigins)",
+      ms: 7500,
+      url:
+        "https://api.allorigins.win" +
+        "/raw?url=" + enc1
+    },
+    {
+      name: "代理節點3 (CorsProxy)",
+      ms: 7500,
+      url:
+        "https://corsproxy.io/?" + enc1
+    },
+    {
+      name: "代理節點4 (CodeTabs)",
+      ms: 7500,
+      url:
+        "https://api.codetabs.com" +
+        "/v1/proxy?quest=" + enc1
+    },
+    {
+      name: "備援節點5 (5年精簡)",
+      ms: 7500,
+      url:
+        "https://api.allorigins.win" +
+        "/raw?url=" + enc2
+    }
   ];
 
   const cKey =
     "gann_web_" + sym + "_" + iv;
+  const ld =
+    document.getElementById("loadBox");
 
   for (let i = 0;
-    i < proxies.length; i++) {
-    const url = proxies[i];
-    const ms = i === 0 ? 12000 : 7000;
+    i < routes.length; i++) {
+    const rt = routes[i];
+    ld.textContent =
+      "嘗試 " + rt.name + "...";
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(
         () => ctrl.abort(),
-        ms
+        rt.ms
       );
-      const r = await fetch(url, {
+      const r = await fetch(rt.url, {
         signal: ctrl.signal
       });
       clearTimeout(tid);
       if (!r.ok) continue;
+      const srcHdr =
+        r.headers.get("X-Source");
       const json = await r.json();
       const parsed = parseYahoo(
         json,
         sym
       );
       if (parsed.candles.length > 0) {
+        parsed.source = srcHdr
+          ? "雲端:" + srcHdr
+          : rt.name;
+        parsed.isCache = false;
         try {
           localStorage.setItem(
             cKey,
@@ -681,9 +735,11 @@ async function fetchYahoo(sym, iv) {
     obj.candles.forEach(b => {
       b.date = new Date(b.date);
     });
+    obj.source = "本地快取數據";
+    obj.isCache = true;
     return obj;
   }
-  throw new Error("無法取得報價");
+  throw new Error("所有線路均繁忙");
 }
 
 function parseYahoo(json, sym) {
@@ -2358,8 +2414,11 @@ async function loadSymbol() {
     document.getElementById("loadBox");
   const eb =
     document.getElementById("errBox");
+  const stag =
+    document.getElementById("srcTag");
   ld.style.display = "flex";
   eb.style.display = "none";
+  eb.classList.remove("warn");
 
   const raw = document.getElementById(
     "codeInp"
@@ -2385,12 +2444,22 @@ async function loadSymbol() {
     st.selBar = null;
     st.panOff = 0;
     st.candles = data.candles;
+    stag.textContent =
+      data.source || "已連線";
+    if (data.isCache) {
+      eb.textContent =
+        "夜間數據源繁忙，已載入本地" +
+        "快取走勢：" + sym;
+      eb.classList.add("warn");
+      eb.style.display = "block";
+    }
     runAnalysis();
   } catch (e) {
     if (myReq !== st.reqId) return;
+    stag.textContent = "連線受阻";
     eb.textContent =
-      "報價讀取失敗，請檢查代碼：" +
-      sym;
+      "所有備援線路均繁忙，請稍後" +
+      "再試或檢查代碼：" + sym;
     eb.style.display = "block";
   }
   if (myReq === st.reqId) {
