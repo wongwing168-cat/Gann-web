@@ -647,7 +647,7 @@ async function fetchYahoo(sym, iv) {
 
   const routes = [
     {
-      name: "雲端直連(Yahoo/Stooq)",
+      name: "雲端直連(港美股專用)",
       ms: 14000,
       url:
         "/.netlify/functions/yahoo" +
@@ -2448,8 +2448,8 @@ async function loadSymbol() {
       data.source || "已連線";
     if (data.isCache) {
       eb.textContent =
-        "夜間數據源繁忙，已載入本地" +
-        "快取走勢：" + sym;
+        "即時數據暫時繁忙，已載入" +
+        "本地快取走勢：" + sym;
       eb.classList.add("warn");
       eb.style.display = "block";
     }
