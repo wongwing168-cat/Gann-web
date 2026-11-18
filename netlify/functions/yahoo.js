@@ -1,13 +1,3 @@
-const yfMod = require("yahoo-finance2");
-const yf = yfMod.default || yfMod;
-
-try {
-  yf.suppressNotices([
-    "yahooSurvey",
-    "ripHistorical"
-  ]);
-} catch (e) {}
-
 async function fetchTimeout(
   url,
   headers,
@@ -60,11 +50,37 @@ function wrapChart(
   return JSON.stringify(obj);
 }
 
-function toTencentCodes(sym) {
+function getTencentSpec(sym) {
   const s = sym.trim().toUpperCase();
-  if (s === "^HSI") return ["hkHSI"];
+  if (s === "^HSI") {
+    return {
+      api: "hkfqkline",
+      codes: ["hkHSI"]
+    };
+  }
   if (s === "^HSCE") {
-    return ["hkHSCEI"];
+    return {
+      api: "hkfqkline",
+      codes: ["hkHSCEI"]
+    };
+  }
+  if (s === "^IXIC") {
+    return {
+      api: "usfqkline",
+      codes: ["us.IXIC"]
+    };
+  }
+  if (s === "^GSPC") {
+    return {
+      api: "usfqkline",
+      codes: ["us.INX"]
+    };
+  }
+  if (s === "^DJI") {
+    return {
+      api: "usfqkline",
+      codes: ["us.DJI"]
+    };
   }
   if (s.endsWith(".HK")) {
     const raw = s.slice(0, -3);
@@ -72,23 +88,32 @@ function toTencentCodes(sym) {
     if (!isNaN(num)) {
       const pad = String(num)
         .padStart(5, "0");
-      return ["hk" + pad];
+      return {
+        api: "hkfqkline",
+        codes: ["hk" + pad]
+      };
     }
-    return ["hk" + raw];
+    return {
+      api: "hkfqkline",
+      codes: ["hk" + raw]
+    };
   }
   if (!s.startsWith("^") &&
     !s.includes(".")) {
-    return [
-      "us" + s + ".OQ",
-      "us" + s + ".N"
-    ];
+    return {
+      api: "usfqkline",
+      codes: [
+        "us" + s + ".OQ",
+        "us" + s + ".N"
+      ]
+    };
   }
-  return [];
+  return null;
 }
 
 async function tryTencent(sym, iv) {
-  const codes = toTencentCodes(sym);
-  if (codes.length === 0) return null;
+  const spec = getTencentSpec(sym);
+  if (!spec) return null;
 
   let per = "day";
   let cnt = 1000;
@@ -100,13 +125,13 @@ async function tryTencent(sym, iv) {
     cnt = 400;
   }
 
-  for (const tc of codes) {
+  for (const tc of spec.codes) {
     const p = tc + "," + per +
       ",,," + cnt + ",qfq";
     const url =
       "https://web.ifzq.gtimg.cn" +
-      "/appstock/app/fqkline/get" +
-      "?param=" +
+      "/appstock/app/" + spec.api +
+      "/get?param=" +
       encodeURIComponent(p);
     try {
       const res = await fetchTimeout(
@@ -114,7 +139,7 @@ async function tryTencent(sym, iv) {
         {
           "User-Agent": "Mozilla/5.0"
         },
-        5500
+        6000
       );
       if (!res.ok) continue;
       const j = await res.json();
@@ -181,68 +206,6 @@ async function tryTencent(sym, iv) {
     } catch (e) {}
   }
   return null;
-}
-
-function calcStartDate(rng) {
-  const now = new Date();
-  if (rng === "max") {
-    return "1980-01-01";
-  }
-  const yrs = rng === "15y" ? 15 : 5;
-  now.setFullYear(
-    now.getFullYear() - yrs
-  );
-  return now.toISOString()
-    .slice(0, 10);
-}
-
-async function tryYF2(sym, iv, rng) {
-  const p1 = calcStartDate(rng);
-  const res = await yf.chart(sym, {
-    period1: p1,
-    interval: iv
-  });
-  const qs = res?.quotes;
-  if (!Array.isArray(qs) ||
-    qs.length < 20) {
-    return null;
-  }
-  const ts = [];
-  const open = [];
-  const high = [];
-  const low = [];
-  const close = [];
-
-  for (const q of qs) {
-    if (!q.date ||
-      q.close == null ||
-      q.open == null ||
-      q.high == null ||
-      q.low == null) {
-      continue;
-    }
-    const sec = Math.floor(
-      new Date(q.date).getTime() /
-      1000
-    );
-    ts.push(sec);
-    open.push(q.open);
-    high.push(q.high);
-    low.push(q.low);
-    close.push(q.close);
-  }
-  if (ts.length < 20) return null;
-  const nm = res.meta?.shortName ||
-    res.meta?.longName || sym;
-  return wrapChart(
-    sym,
-    nm,
-    ts,
-    open,
-    high,
-    low,
-    close
-  );
 }
 
 function toStooqSym(sym) {
@@ -325,6 +288,44 @@ async function tryStooq(sym, iv) {
   );
 }
 
+async function tryYahooDirect(
+  sym,
+  iv,
+  rng
+) {
+  const enc = encodeURIComponent(sym);
+  const hosts = [
+    "query1.finance.yahoo.com",
+    "query2.finance.yahoo.com"
+  ];
+  const hdr = {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; " +
+      "Intel Mac OS X 10_15_7)",
+    Accept: "application/json"
+  };
+  for (const h of hosts) {
+    const url =
+      "https://" + h +
+      "/v8/finance/chart/" + enc +
+      "?range=" + rng +
+      "&interval=" + iv;
+    try {
+      const res = await fetchTimeout(
+        url,
+        hdr,
+        5500
+      );
+      if (!res.ok) continue;
+      const txt = await res.text();
+      if (txt.includes('"timestamp"')) {
+        return txt;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
 exports.handler = async (event) => {
   const qs =
     event.queryStringParameters || {};
@@ -349,27 +350,9 @@ exports.handler = async (event) => {
         statusCode: 200,
         headers: {
           ...corsHdr,
-          "X-Source": "Tencent-Direct"
+          "X-Source": "Tencent-HKUS"
         },
         body: tq
-      };
-    }
-  } catch (e) {}
-
-  try {
-    const y2 = await tryYF2(
-      sym,
-      iv,
-      rng
-    );
-    if (y2) {
-      return {
-        statusCode: 200,
-        headers: {
-          ...corsHdr,
-          "X-Source": "YF2-Crumb"
-        },
-        body: y2
       };
     }
   } catch (e) {}
@@ -387,6 +370,24 @@ exports.handler = async (event) => {
           "X-Source": "Stooq-Backup"
         },
         body: sq
+      };
+    }
+  } catch (e) {}
+
+  try {
+    const yh = await tryYahooDirect(
+      sym,
+      iv,
+      rng
+    );
+    if (yh) {
+      return {
+        statusCode: 200,
+        headers: {
+          ...corsHdr,
+          "X-Source": "Yahoo-Direct"
+        },
+        body: yh
       };
     }
   } catch (e) {}
