@@ -93,6 +93,10 @@ body {
   color: #38bdf8;
   border-color: #075985;
 }
+.btn-m {
+  color: #34d399;
+  border-color: #065f46;
+}
 .btn-del {
   color: #f87171;
   border-color: #7f1d1d;
@@ -220,7 +224,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 12px;
 }
 .hud-txt {
@@ -283,9 +287,10 @@ canvas {
   font-weight: 700;
 }
 .c-big {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #fff;
+  line-height: 1.45;
 }
 .c-sub {
   font-size: 12px;
@@ -419,14 +424,26 @@ canvas {
           id="hudTxt">載入中...</span>
         <div class="sp"></div>
         <button
-          class="btn btn-hi"
-          id="btnMode">移動時間線</button>
+          class="btn btn-m"
+          id="btnHistBack"
+          style="display:none">
+          ◀ 向前
+        </button>
+        <button
+          class="btn btn-m"
+          id="btnHistFwd"
+          style="display:none">
+          向後 ▶
+        </button>
         <button
           class="btn btn-hi"
           id="btnLatest"
           style="display:none">
           回最新
         </button>
+        <button
+          class="btn btn-hi"
+          id="btnMode">移動時間線</button>
         <button
           class="btn btn-c"
           id="btnZoomIn">+</button>
@@ -1862,13 +1879,58 @@ function calcPctGrid(candles) {
   }));
 }
 
+function checkHarmPriceValid(
+  candles,
+  fromIdx,
+  bull,
+  xP,
+  bP,
+  cP,
+  przLo,
+  przHi,
+  extLim
+) {
+  for (
+    let i = fromIdx;
+    i < candles.length;
+    i++
+  ) {
+    const bar = candles[i];
+    if (bull) {
+      const fl = Math.min(
+        przLo,
+        extLim
+      );
+      if (bar.low < fl ||
+        bar.low < xP ||
+        bar.high > cP) {
+        return false;
+      }
+    } else {
+      const cl = Math.max(
+        przHi,
+        extLim
+      );
+      if (bar.low < bP ||
+        bar.low < cP ||
+        bar.high > cl ||
+        bar.high > xP) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function detectHarmonic(
   candles,
   swings,
   iv
 ) {
   const n = swings.length;
-  if (n < 4) return null;
+  if (n < 4 || candles.length === 0) {
+    return null;
+  }
   const lastI = candles.length - 1;
   const lastD = candles[lastI].date;
   const step = intvMeta(iv).days;
@@ -1879,66 +1941,96 @@ function detectHarmonic(
     const b = swings[n - 3];
     const c = swings[n - 2];
     const d = swings[n - 1];
-    const xa = Math.abs(
-      a.price - x.price
-    );
-    const ab = Math.abs(
-      b.price - a.price
-    );
-    const bc = Math.abs(
-      c.price - b.price
-    );
-    const ad = Math.abs(
-      d.price - a.price
-    );
-    if (xa > 0 && ab > 0 && bc > 0) {
-      const rAb = ab / xa;
-      const rAd = ad / xa;
-      const bull =
-        !x.isHigh && a.isHigh;
-      let nm = "";
-      if (rAb >= 0.35 &&
-        rAb <= 0.54 &&
-        rAd >= 0.82 &&
-        rAd <= 0.94) {
-        nm = bull
-          ? "看漲蝙蝠形態"
-          : "看跌蝙蝠形態";
-      } else if (rAb >= 0.55 &&
-        rAb <= 0.68 &&
-        rAd >= 0.73 &&
-        rAd <= 0.84) {
-        nm = bull
-          ? "看漲伽利222"
-          : "看跌伽利222";
-      } else {
-        const cd = Math.abs(
-          d.price - c.price
-        );
-        const cdAb = cd / ab;
-        if (cdAb >= 0.88 &&
-          cdAb <= 1.35) {
+    const bull =
+      !x.isHigh && a.isHigh;
+    const dirOk = bull
+      ? (a.isHigh && !b.isHigh &&
+        c.isHigh && !d.isHigh)
+      : (!a.isHigh && b.isHigh &&
+        !c.isHigh && d.isHigh);
+    const ordOk = bull
+      ? (a.price > c.price &&
+        c.price > b.price &&
+        b.price > d.price)
+      : (a.price < c.price &&
+        c.price < b.price &&
+        b.price < d.price);
+
+    if (dirOk && ordOk) {
+      const xa = Math.abs(
+        a.price - x.price
+      );
+      const ab = Math.abs(
+        b.price - a.price
+      );
+      const bc = Math.abs(
+        c.price - b.price
+      );
+      const ad = Math.abs(
+        d.price - a.price
+      );
+      if (xa > 0 && ab > 0 && bc > 0) {
+        const rAb = ab / xa;
+        const rAd = ad / xa;
+        let nm = "";
+        if (rAb >= 0.35 &&
+          rAb <= 0.54 &&
+          rAd >= 0.82 &&
+          rAd <= 0.94) {
           nm = bull
-            ? "看漲ABCD形態"
-            : "看跌ABCD形態";
+            ? "看漲蝙蝠形態"
+            : "看跌蝙蝠形態";
+        } else if (rAb >= 0.55 &&
+          rAb <= 0.68 &&
+          rAd >= 0.73 &&
+          rAd <= 0.84) {
+          nm = bull
+            ? "看漲伽利222"
+            : "看跌伽利222";
+        } else {
+          const cd = Math.abs(
+            d.price - c.price
+          );
+          const cdAb = cd / ab;
+          if (cdAb >= 0.88 &&
+            cdAb <= 1.35) {
+            nm = bull
+              ? "看漲ABCD形態"
+              : "看跌ABCD形態";
+          }
         }
-      }
-      if (nm) {
-        return {
-          name: nm,
-          bull,
-          done: true,
-          nodes: [
-            { l: "X", ...x },
-            { l: "A", ...a },
-            { l: "B", ...b },
-            { l: "C", ...c },
-            { l: "D", ...d }
-          ],
-          przLo: d.price * 0.99,
-          przHi: d.price * 1.01,
-          dDate: d.date
-        };
+        if (nm) {
+          const przLo = d.price * 0.985;
+          const przHi = d.price * 1.015;
+          const ok = checkHarmPriceValid(
+            candles,
+            d.index + 1,
+            bull,
+            x.price,
+            b.price,
+            c.price,
+            przLo,
+            przHi,
+            bull ? przLo : przHi
+          );
+          if (ok) {
+            return {
+              name: nm,
+              bull,
+              done: true,
+              nodes: [
+                { l: "X", ...x },
+                { l: "A", ...a },
+                { l: "B", ...b },
+                { l: "C", ...c },
+                { l: "D", ...d }
+              ],
+              przLo,
+              przHi,
+              dDate: d.date
+            };
+          }
+        }
       }
     }
   }
@@ -1958,27 +2050,66 @@ function detectHarmonic(
   }
   const rAb = ab / xa;
   const bull = !x.isHigh && a.isHigh;
-  const sign = bull ? -1 : 1;
   let nm = bull
     ? "潛在看漲ABCD"
     : "潛在看跌ABCD";
-  let tr = 0.786;
+  let bcR = 1.272;
   if (rAb >= 0.35 && rAb <= 0.54) {
     nm = bull
       ? "潛在看漲蝙蝠222"
       : "潛在看跌蝙蝠222";
-    tr = 0.886;
+    bcR = 1.618;
   } else if (rAb >= 0.55 &&
     rAb <= 0.72) {
     nm = bull
       ? "潛在看漲伽利222"
       : "潛在看跌伽利222";
-    tr = 0.786;
+    bcR = 1.272;
   }
-  const dP = Math.max(
-    0.01,
-    a.price + sign * xa * tr
+
+  let dP = 0;
+  let ext1618 = 0;
+  if (bull) {
+    const dirOk = a.isHigh &&
+      !b.isHigh && c.isHigh;
+    const cb = c.price - b.price;
+    if (!dirOk || cb <= 0) return null;
+    dP = c.price - bcR * cb;
+    ext1618 = c.price - 1.618 * cb;
+    const ok = dP > 0 &&
+      a.price > c.price &&
+      c.price > b.price &&
+      b.price > dP;
+    if (!ok) return null;
+  } else {
+    const dirOk = !a.isHigh &&
+      b.isHigh && !c.isHigh;
+    const bc = b.price - c.price;
+    if (!dirOk || bc <= 0) return null;
+    dP = c.price + bcR * bc;
+    ext1618 = c.price + 1.618 * bc;
+    const ok =
+      a.price < c.price &&
+      c.price < b.price &&
+      b.price < dP;
+    if (!ok) return null;
+  }
+
+  const przLo = dP * 0.985;
+  const przHi = dP * 1.015;
+  const valid = checkHarmPriceValid(
+    candles,
+    c.index + 1,
+    bull,
+    x.price,
+    b.price,
+    c.price,
+    przLo,
+    przHi,
+    ext1618
   );
+  if (!valid) return null;
+
   const abB = Math.max(
     3,
     b.index - a.index
@@ -2007,8 +2138,8 @@ function detectHarmonic(
         date: dDt
       }
     ],
-    przLo: dP * 0.985,
-    przHi: dP * 1.015,
+    przLo,
+    przHi,
     dDate: dDt
   };
 }
@@ -2202,9 +2333,17 @@ function runAnalysis() {
       fmt(harm.przLo) + " ~ " +
       fmt(harm.przHi)
     );
+  } else if (st.interval === "1d") {
+    lines.push(
+      "當前處於單邊趨勢延伸中，" +
+      "暫無有效日線和諧形態" +
+      "（建議切換週線檢視大週期結構）"
+    );
   } else {
     lines.push(
-      "目前波段尚未構成標準XABCD"
+      "當前處於單邊趨勢延伸中，" +
+      "暫無有效" + meta.t +
+      "和諧形態"
     );
   }
 
@@ -2310,9 +2449,17 @@ function updateCards() {
       fmt(r.harm.przLo) + " ~ " +
       fmt(r.harm.przHi);
   } else {
+    const meta = intvMeta(st.interval);
+    const fb = st.interval === "1d"
+      ? "當前處於單邊趨勢延伸中，" +
+        "暫無有效日線和諧形態" +
+        "（建議切換週線檢視大週期結構）"
+      : "當前處於單邊趨勢延伸中，" +
+        "暫無有效" + meta.t +
+        "和諧形態（建議切換其他週期）";
     document.getElementById(
       "harmName"
-    ).textContent = "暫無標準形態";
+    ).textContent = fb;
     document.getElementById(
       "harmDate"
     ).textContent = "--";
@@ -2320,6 +2467,32 @@ function updateCards() {
       "harmPrz"
     ).textContent = "--";
   }
+}
+
+function maxPanLimit() {
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  return Math.max(0, maxE - winL);
+}
+
+function panBackward(step) {
+  const lim = maxPanLimit();
+  st.panOff = Math.min(
+    lim,
+    st.panOff + step
+  );
+}
+
+function panForward(step) {
+  st.panOff = Math.max(
+    0,
+    st.panOff - step
+  );
 }
 
 function getVisRange() {
@@ -2346,17 +2519,7 @@ function getVisRange() {
 }
 
 function ensureVisible(bar) {
-  const lastH = Math.max(
-    0,
-    st.candles.length - 1
-  );
-  const maxE = lastH + st.horizon;
-  const winL =
-    st.histBars + st.horizon;
-  const maxP = Math.max(
-    0,
-    maxE - winL
-  );
+  const maxP = maxPanLimit();
   const { startB, endB } = getVisRange();
   if (bar < startB) {
     st.panOff = Math.min(
@@ -2980,6 +3143,19 @@ function updateHud() {
   ).textContent =
     nm + dStr + " " + pStr + gStr;
 
+  const { startB } = getVisRange();
+  const bBack = document.getElementById(
+    "btnHistBack"
+  );
+  bBack.style.display =
+    startB > 0 ? "inline-block" : "none";
+
+  const bFwd = document.getElementById(
+    "btnHistFwd"
+  );
+  bFwd.style.display =
+    st.panOff > 0 ? "inline-block" : "none";
+
   const bLat = document.getElementById(
     "btnLatest"
   );
@@ -3301,6 +3477,28 @@ function initEvents() {
     updVol();
   };
 
+  document.getElementById(
+    "btnHistBack"
+  ).onclick = () => {
+    const step = Math.max(
+      15,
+      Math.floor(st.histBars / 3)
+    );
+    panBackward(step);
+    drawChart();
+  };
+
+  document.getElementById(
+    "btnHistFwd"
+  ).onclick = () => {
+    const step = Math.max(
+      15,
+      Math.floor(st.histBars / 3)
+    );
+    panForward(step);
+    drawChart();
+  };
+
   const bMode =
     document.getElementById("btnMode");
   bMode.onclick = () => {
@@ -3456,14 +3654,25 @@ function initEvents() {
     if (Math.abs(dx) > 4) {
       moved = true;
     }
+    const rect =
+      cv.getBoundingClientRect();
     if (st.moveLine || dragAxis) {
+      const lx = e.clientX - rect.left;
+      const plotW = Math.max(
+        1,
+        rect.width - 58
+      );
+      if (lx < 24) {
+        panBackward(2);
+      } else if (lx > plotW - 24 &&
+        st.panOff > 0) {
+        panForward(2);
+      }
       st.selBar = barAt(e.clientX);
       drawChart();
       return;
     }
     if (!moved) return;
-    const rect =
-      cv.getBoundingClientRect();
     const {
       startB,
       endB
@@ -3479,17 +3688,7 @@ function initEvents() {
     const dBars = Math.round(
       (dx / useW) * span
     );
-    const lastH = Math.max(
-      0,
-      st.candles.length - 1
-    );
-    const maxE = lastH + st.horizon;
-    const winL =
-      st.histBars + st.horizon;
-    const maxP = Math.max(
-      0,
-      maxE - winL
-    );
+    const maxP = maxPanLimit();
     st.panOff = Math.max(
       0,
       Math.min(maxP, basePan + dBars)
