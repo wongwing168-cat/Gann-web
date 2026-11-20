@@ -93,6 +93,11 @@ body {
   color: #38bdf8;
   border-color: #075985;
 }
+.btn-del {
+  color: #f87171;
+  border-color: #7f1d1d;
+  padding: 5px 7px;
+}
 .ac-wrap {
   position: relative;
   display: inline-block;
@@ -158,8 +163,11 @@ input, select {
   font-size: 13px;
 }
 input {
-  width: 118px;
+  width: 112px;
   text-transform: uppercase;
+}
+select {
+  max-width: 155px;
 }
 .lbl {
   font-size: 12px;
@@ -312,8 +320,14 @@ canvas {
       class="btn btn-c"
       id="btnIxic">納指</button>
     <select id="presetSel">
-      <option value="">自選標的</option>
+      <option value="">自選紀錄</option>
     </select>
+    <button
+      class="btn btn-del"
+      id="btnDelSaved"
+      title="從自選移除目前標的">
+      刪
+    </button>
     <div class="ac-wrap">
       <input
         id="codeInp"
@@ -736,6 +750,9 @@ for (const c of CATALOG) {
   NAMES[c.s] = c.n;
 }
 
+const PREF_KEY = "gann_web_prefs_v1";
+const SAVED_KEY = "gann_web_saved_v1";
+
 const st = {
   market: "hk",
   code: "^HSI",
@@ -757,8 +774,170 @@ const st = {
   moveLine: true,
   reqId: 0,
   pillBox: null,
-  acTimer: null
+  acTimer: null,
+  saved: []
 };
+
+function savePrefs() {
+  const obj = {
+    market: st.market,
+    code: st.code,
+    name: st.name,
+    style: st.style,
+    interval: st.interval,
+    horizon: st.horizon,
+    dir: st.dir,
+    volMult: st.volMult,
+    showGrid: st.showGrid,
+    showFib: st.showFib,
+    showHarm: st.showHarm,
+    histBars: st.histBars,
+    moveLine: st.moveLine
+  };
+  try {
+    localStorage.setItem(
+      PREF_KEY,
+      JSON.stringify(obj)
+    );
+  } catch (e) {}
+}
+
+function persistSaved() {
+  try {
+    localStorage.setItem(
+      SAVED_KEY,
+      JSON.stringify(st.saved)
+    );
+  } catch (e) {}
+}
+
+function recordSaved(sym, nm, mkt) {
+  const disp = nm || sym;
+  st.saved = st.saved.filter(
+    x => x.s !== sym
+  );
+  st.saved.unshift({
+    s: sym,
+    n: disp,
+    m: mkt
+  });
+  if (st.saved.length > 30) {
+    st.saved = st.saved.slice(0, 30);
+  }
+  persistSaved();
+  fillPresets();
+}
+
+function restoreState() {
+  const rawS =
+    localStorage.getItem(SAVED_KEY);
+  if (rawS != null) {
+    try {
+      st.saved = JSON.parse(rawS);
+    } catch (e) {
+      st.saved = [];
+    }
+  } else {
+    st.saved = [
+      {
+        s: "^HSI",
+        n: "恒生指數",
+        m: "hk"
+      },
+      {
+        s: "0700.HK",
+        n: "騰訊控股",
+        m: "hk"
+      },
+      {
+        s: "^IXIC",
+        n: "納斯達克指數",
+        m: "us"
+      },
+      {
+        s: "AAPL",
+        n: "蘋果公司 Apple",
+        m: "us"
+      }
+    ];
+    persistSaved();
+  }
+
+  const rawP =
+    localStorage.getItem(PREF_KEY);
+  if (rawP) {
+    try {
+      const p = JSON.parse(rawP);
+      if (p.market) st.market = p.market;
+      if (p.code) st.code = p.code;
+      if (p.name != null) {
+        st.name = p.name;
+      }
+      if (p.style) st.style = p.style;
+      if (p.interval) {
+        st.interval = p.interval;
+      }
+      if (p.horizon) {
+        st.horizon = p.horizon;
+      }
+      if (p.dir) st.dir = p.dir;
+      if (p.volMult) {
+        st.volMult = p.volMult;
+      }
+      if (typeof p.showGrid === "boolean") {
+        st.showGrid = p.showGrid;
+      }
+      if (typeof p.showFib === "boolean") {
+        st.showFib = p.showFib;
+      }
+      if (typeof p.showHarm === "boolean") {
+        st.showHarm = p.showHarm;
+      }
+      if (p.histBars) {
+        st.histBars = p.histBars;
+      }
+      if (typeof p.moveLine === "boolean") {
+        st.moveLine = p.moveLine;
+      }
+    } catch (e) {}
+  }
+
+  setSegVal("mktSeg", st.market);
+  setSegVal("stySeg", st.style);
+  setSegVal("intSeg", st.interval);
+  setSegVal("horSeg", st.horizon);
+  setSegVal("dirSeg", st.dir);
+  document.getElementById(
+    "codeInp"
+  ).value = st.code;
+  document.getElementById(
+    "togGrid"
+  ).classList.toggle("on", st.showGrid);
+  document.getElementById(
+    "togFib"
+  ).classList.toggle("on", st.showFib);
+  document.getElementById(
+    "togHarm"
+  ).classList.toggle("on", st.showHarm);
+  document.getElementById(
+    "volLbl"
+  ).textContent =
+    "波動:" +
+    st.volMult.toFixed(1) + "x";
+
+  const bMode =
+    document.getElementById("btnMode");
+  bMode.textContent = st.moveLine
+    ? "移動時間線" : "拖動歷史";
+  bMode.classList.toggle(
+    "btn-hi",
+    st.moveLine
+  );
+  bMode.classList.toggle(
+    "on",
+    !st.moveLine
+  );
+}
 
 function fmt(v) {
   return Number(v).toFixed(2);
@@ -1011,7 +1190,7 @@ function renderAc(items) {
       box.style.display = "none";
       st.market = it.m;
       setSegVal("mktSeg", it.m);
-      fillPresets();
+      savePrefs();
       document.getElementById(
         "codeInp"
       ).value = it.s;
@@ -2822,17 +3001,24 @@ function fillPresets() {
   const sel = document.getElementById(
     "presetSel"
   );
+  const cnt = st.saved.length;
+  const ph = cnt > 0
+    ? "自選紀錄 (" + cnt + ")"
+    : "暫無自選紀錄";
   sel.innerHTML =
-    '<option value="">自選標的</option>';
-  const list = CATALOG.filter(
-    p => p.m === st.market
-  );
-  for (const p of list) {
+    '<option value="">' +
+    ph + "</option>";
+  for (const p of st.saved) {
     const opt =
       document.createElement("option");
     opt.value = p.s;
+    const tag = p.m === "hk"
+      ? "[港] " : "[美] ";
     opt.textContent =
-      p.s + " " + p.n;
+      tag + p.s + " " + p.n;
+    if (p.s === st.code) {
+      opt.selected = true;
+    }
     sel.appendChild(opt);
   }
 }
@@ -2878,6 +3064,14 @@ async function loadSymbol() {
     st.candles = data.candles;
     stag.textContent =
       data.source || "已連線";
+    if (st.candles.length > 0) {
+      recordSaved(
+        sym,
+        st.name,
+        st.market
+      );
+      savePrefs();
+    }
     if (data.isCache) {
       eb.textContent =
         "即時數據暫時繁忙，已載入" +
@@ -2930,7 +3124,7 @@ function setSegVal(id, val) {
 function initEvents() {
   bindSeg("mktSeg", v => {
     st.market = v;
-    fillPresets();
+    savePrefs();
     document.getElementById(
       "codeInp"
     ).value =
@@ -2940,21 +3134,25 @@ function initEvents() {
 
   bindSeg("stySeg", v => {
     st.style = v;
+    savePrefs();
     drawChart();
   });
 
   bindSeg("intSeg", v => {
     st.interval = v;
+    savePrefs();
     loadSymbol();
   });
 
   bindSeg("horSeg", v => {
     st.horizon = Number(v);
+    savePrefs();
     runAnalysis();
   });
 
   bindSeg("dirSeg", v => {
     st.dir = v;
+    savePrefs();
     runAnalysis();
   });
 
@@ -2963,7 +3161,7 @@ function initEvents() {
   ).onclick = () => {
     st.market = "hk";
     setSegVal("mktSeg", "hk");
-    fillPresets();
+    savePrefs();
     document.getElementById(
       "codeInp"
     ).value = "^HSI";
@@ -2975,7 +3173,7 @@ function initEvents() {
   ).onclick = () => {
     st.market = "us";
     setSegVal("mktSeg", "us");
-    fillPresets();
+    savePrefs();
     document.getElementById(
       "codeInp"
     ).value = "^IXIC";
@@ -2985,12 +3183,35 @@ function initEvents() {
   document.getElementById(
     "presetSel"
   ).onchange = e => {
-    if (e.target.value) {
-      document.getElementById(
-        "codeInp"
-      ).value = e.target.value;
-      loadSymbol();
+    const val = e.target.value;
+    if (!val) return;
+    const hit = st.saved.find(
+      x => x.s === val
+    );
+    if (hit && hit.m) {
+      st.market = hit.m;
+      setSegVal("mktSeg", hit.m);
     }
+    document.getElementById(
+      "codeInp"
+    ).value = val;
+    loadSymbol();
+  };
+
+  document.getElementById(
+    "btnDelSaved"
+  ).onclick = () => {
+    const sel = document.getElementById(
+      "presetSel"
+    );
+    const target =
+      sel.value || st.code;
+    if (!target) return;
+    st.saved = st.saved.filter(
+      x => x.s !== target
+    );
+    persistSaved();
+    fillPresets();
   };
 
   document.getElementById(
@@ -3044,6 +3265,7 @@ function initEvents() {
         "on",
         st[key]
       );
+      savePrefs();
       fn();
     };
   };
@@ -3057,6 +3279,7 @@ function initEvents() {
     ).textContent =
       "波動:" +
       st.volMult.toFixed(1) + "x";
+    savePrefs();
     runAnalysis();
   };
   document.getElementById(
@@ -3092,6 +3315,7 @@ function initEvents() {
       "on",
       !st.moveLine
     );
+    savePrefs();
   };
 
   document.getElementById(
@@ -3108,6 +3332,7 @@ function initEvents() {
       45,
       st.histBars - 30
     );
+    savePrefs();
     drawChart();
   };
   document.getElementById(
@@ -3117,6 +3342,7 @@ function initEvents() {
       360,
       st.histBars + 30
     );
+    savePrefs();
     drawChart();
   };
 
@@ -3292,6 +3518,7 @@ function initEvents() {
         st.histBars + step
       )
     );
+    savePrefs();
     drawChart();
   };
 
@@ -3321,6 +3548,7 @@ function initEvents() {
   );
 }
 
+restoreState();
 fillPresets();
 initEvents();
 loadSymbol();
