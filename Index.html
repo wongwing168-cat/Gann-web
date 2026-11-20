@@ -286,6 +286,11 @@ canvas {
   font-size: 12px;
   font-weight: 700;
 }
+.c-cyn {
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 700;
+}
 .c-big {
   font-size: 15px;
   font-weight: 700;
@@ -424,6 +429,12 @@ canvas {
           id="hudTxt">載入中...</span>
         <div class="sp"></div>
         <button
+          class="btn on"
+          id="btnLocHarm"
+          style="display:none">
+          定位形態
+        </button>
+        <button
           class="btn btn-m"
           id="btnHistBack"
           style="display:none">
@@ -497,6 +508,12 @@ canvas {
       <div class="card">
         <div class="c-hd c-mnt">
           <span>和諧交易形態推演</span>
+        </div>
+        <div
+          class="c-cyn"
+          id="harmBadge"
+          style="display:none">
+          ◎ 已自動向前推移鎖定歷史形態
         </div>
         <div
           class="c-big"
@@ -1879,7 +1896,60 @@ function calcPctGrid(candles) {
   }));
 }
 
-function checkHarmPriceValid(
+function checkCompletedValid(
+  candles,
+  dIdx,
+  bull,
+  xP,
+  przLo,
+  przHi
+) {
+  const start = dIdx + 1;
+  if (start >= candles.length) {
+    return { ok: true, unb: true };
+  }
+  let brokeAt = -1;
+  if (bull) {
+    const stp = Math.min(
+      przLo * 0.985,
+      xP * 0.99
+    );
+    for (
+      let i = start;
+      i < candles.length;
+      i++
+    ) {
+      if (candles[i].low < stp) {
+        brokeAt = i;
+        break;
+      }
+    }
+  } else {
+    const stp = Math.max(
+      przHi * 1.015,
+      xP * 1.01
+    );
+    for (
+      let i = start;
+      i < candles.length;
+      i++
+    ) {
+      if (candles[i].high > stp) {
+        brokeAt = i;
+        break;
+      }
+    }
+  }
+  if (brokeAt === -1) {
+    return { ok: true, unb: true };
+  }
+  return {
+    ok: brokeAt - dIdx >= 4,
+    unb: false
+  };
+}
+
+function checkProjValid(
   candles,
   fromIdx,
   bull,
@@ -1922,123 +1992,119 @@ function checkHarmPriceValid(
   return true;
 }
 
-function detectHarmonic(
+function evalXABCD(
+  x,
+  a,
+  b,
+  c,
+  d,
   candles,
-  swings,
-  iv
+  isBack
 ) {
-  const n = swings.length;
-  if (n < 4 || candles.length === 0) {
+  const bull = !x.isHigh && a.isHigh;
+  const dirOk = bull
+    ? (a.isHigh && !b.isHigh &&
+      c.isHigh && !d.isHigh)
+    : (!a.isHigh && b.isHigh &&
+      !c.isHigh && d.isHigh);
+  const ordOk = bull
+    ? (a.price > c.price &&
+      c.price > b.price &&
+      b.price > d.price)
+    : (a.price < c.price &&
+      c.price < b.price &&
+      b.price < d.price);
+  if (!dirOk || !ordOk) return null;
+
+  const xa = Math.abs(
+    a.price - x.price
+  );
+  const ab = Math.abs(
+    b.price - a.price
+  );
+  const bc = Math.abs(
+    c.price - b.price
+  );
+  const ad = Math.abs(
+    d.price - a.price
+  );
+  if (xa <= 0 || ab <= 0 || bc <= 0) {
     return null;
   }
-  const lastI = candles.length - 1;
-  const lastD = candles[lastI].date;
-  const step = intvMeta(iv).days;
-
-  if (n >= 5) {
-    const x = swings[n - 5];
-    const a = swings[n - 4];
-    const b = swings[n - 3];
-    const c = swings[n - 2];
-    const d = swings[n - 1];
-    const bull =
-      !x.isHigh && a.isHigh;
-    const dirOk = bull
-      ? (a.isHigh && !b.isHigh &&
-        c.isHigh && !d.isHigh)
-      : (!a.isHigh && b.isHigh &&
-        !c.isHigh && d.isHigh);
-    const ordOk = bull
-      ? (a.price > c.price &&
-        c.price > b.price &&
-        b.price > d.price)
-      : (a.price < c.price &&
-        c.price < b.price &&
-        b.price < d.price);
-
-    if (dirOk && ordOk) {
-      const xa = Math.abs(
-        a.price - x.price
-      );
-      const ab = Math.abs(
-        b.price - a.price
-      );
-      const bc = Math.abs(
-        c.price - b.price
-      );
-      const ad = Math.abs(
-        d.price - a.price
-      );
-      if (xa > 0 && ab > 0 && bc > 0) {
-        const rAb = ab / xa;
-        const rAd = ad / xa;
-        let nm = "";
-        if (rAb >= 0.35 &&
-          rAb <= 0.54 &&
-          rAd >= 0.82 &&
-          rAd <= 0.94) {
-          nm = bull
-            ? "看漲蝙蝠形態"
-            : "看跌蝙蝠形態";
-        } else if (rAb >= 0.55 &&
-          rAb <= 0.68 &&
-          rAd >= 0.73 &&
-          rAd <= 0.84) {
-          nm = bull
-            ? "看漲伽利222"
-            : "看跌伽利222";
-        } else {
-          const cd = Math.abs(
-            d.price - c.price
-          );
-          const cdAb = cd / ab;
-          if (cdAb >= 0.88 &&
-            cdAb <= 1.35) {
-            nm = bull
-              ? "看漲ABCD形態"
-              : "看跌ABCD形態";
-          }
-        }
-        if (nm) {
-          const przLo = d.price * 0.985;
-          const przHi = d.price * 1.015;
-          const ok = checkHarmPriceValid(
-            candles,
-            d.index + 1,
-            bull,
-            x.price,
-            b.price,
-            c.price,
-            przLo,
-            przHi,
-            bull ? przLo : przHi
-          );
-          if (ok) {
-            return {
-              name: nm,
-              bull,
-              done: true,
-              nodes: [
-                { l: "X", ...x },
-                { l: "A", ...a },
-                { l: "B", ...b },
-                { l: "C", ...c },
-                { l: "D", ...d }
-              ],
-              przLo,
-              przHi,
-              dDate: d.date
-            };
-          }
-        }
-      }
+  const rAb = ab / xa;
+  const rAd = ad / xa;
+  let nm = "";
+  if (rAb >= 0.35 &&
+    rAb <= 0.54 &&
+    rAd >= 0.82 &&
+    rAd <= 0.94) {
+    nm = bull
+      ? "看漲蝙蝠形態"
+      : "看跌蝙蝠形態";
+  } else if (rAb >= 0.55 &&
+    rAb <= 0.68 &&
+    rAd >= 0.73 &&
+    rAd <= 0.84) {
+    nm = bull
+      ? "看漲伽利222"
+      : "看跌伽利222";
+  } else {
+    const cd = Math.abs(
+      d.price - c.price
+    );
+    const cdAb = cd / ab;
+    if (cdAb >= 0.88 &&
+      cdAb <= 1.35) {
+      nm = bull
+        ? "看漲ABCD形態"
+        : "看跌ABCD形態";
     }
   }
+  if (!nm) return null;
 
-  const x = swings[n - 4];
-  const a = swings[n - 3];
-  const b = swings[n - 2];
-  const c = swings[n - 1];
+  const przLo = d.price * 0.985;
+  const przHi = d.price * 1.015;
+  const chk = checkCompletedValid(
+    candles,
+    d.index,
+    bull,
+    x.price,
+    przLo,
+    przHi
+  );
+  if (!chk.ok) return null;
+
+  const tag = isBack ? "(回溯)" : "";
+  return {
+    unb: chk.unb,
+    pat: {
+      name: nm + tag,
+      bull,
+      done: true,
+      nodes: [
+        { l: "X", ...x },
+        { l: "A", ...a },
+        { l: "B", ...b },
+        { l: "C", ...c },
+        { l: "D", ...d }
+      ],
+      przLo,
+      przHi,
+      dDate: d.date
+    }
+  };
+}
+
+function projXABC(
+  x,
+  a,
+  b,
+  c,
+  candles,
+  lastI,
+  lastD,
+  step
+) {
   const xa = Math.abs(
     a.price - x.price
   );
@@ -2097,7 +2163,7 @@ function detectHarmonic(
 
   const przLo = dP * 0.985;
   const przHi = dP * 1.015;
-  const valid = checkHarmPriceValid(
+  const valid = checkProjValid(
     candles,
     c.index + 1,
     bull,
@@ -2142,6 +2208,58 @@ function detectHarmonic(
     przHi,
     dDate: dDt
   };
+}
+
+function detectHarmonic(
+  candles,
+  swings,
+  iv
+) {
+  const n = swings.length;
+  if (n < 4 || candles.length === 0) {
+    return null;
+  }
+  const lastI = candles.length - 1;
+  const lastD = candles[lastI].date;
+  const step = intvMeta(iv).days;
+  const maxS = Math.min(18, n - 4);
+  let fallback = null;
+
+  for (let s = 0; s <= maxS; s++) {
+    const endP = n - 1 - s;
+    const isBack = s > 0;
+    if (endP >= 4) {
+      const hit = evalXABCD(
+        swings[endP - 4],
+        swings[endP - 3],
+        swings[endP - 2],
+        swings[endP - 1],
+        swings[endP],
+        candles,
+        isBack
+      );
+      if (hit) {
+        if (hit.unb) return hit.pat;
+        if (!fallback) {
+          fallback = hit.pat;
+        }
+      }
+    }
+    if (s === 0) {
+      const proj = projXABC(
+        swings[n - 4],
+        swings[n - 3],
+        swings[n - 2],
+        swings[n - 1],
+        candles,
+        lastI,
+        lastD,
+        step
+      );
+      if (proj) return proj;
+    }
+  }
+  return fallback;
 }
 
 function runAnalysis() {
@@ -2432,7 +2550,14 @@ function updateCards() {
     ).textContent = "--";
   }
 
+  const hBadge = document.getElementById(
+    "harmBadge"
+  );
   if (r.harm) {
+    const isBk = r.harm.name
+      .includes("回溯");
+    hBadge.style.display =
+      isBk ? "block" : "none";
     document.getElementById(
       "harmName"
     ).textContent =
@@ -2449,6 +2574,7 @@ function updateCards() {
       fmt(r.harm.przLo) + " ~ " +
       fmt(r.harm.przHi);
   } else {
+    hBadge.style.display = "none";
     const meta = intvMeta(st.interval);
     const fb = st.interval === "1d"
       ? "當前處於單邊趨勢延伸中，" +
@@ -2467,6 +2593,42 @@ function updateCards() {
       "harmPrz"
     ).textContent = "--";
   }
+}
+
+function focusHarmonic() {
+  const h = st.res?.harm;
+  if (!h || !h.nodes?.length) return;
+  const xI = h.nodes[0].index;
+  const dI = h.nodes[4].index;
+  const span = Math.max(10, dI - xI);
+  if (span + 24 > st.histBars) {
+    st.histBars = Math.min(
+      360,
+      span + 30
+    );
+    savePrefs();
+  }
+  const mid = Math.floor(
+    (xI + dI) / 2
+  );
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  const desEnd =
+    mid + Math.floor(winL / 2);
+  const lim = maxPanLimit();
+  st.panOff = Math.max(
+    0,
+    Math.min(lim, maxE - desEnd)
+  );
+  if (dI >= 0 && dI <= maxE) {
+    st.selBar = dI;
+  }
+  drawChart();
 }
 
 function maxPanLimit() {
@@ -2603,7 +2765,16 @@ function drawChart() {
         lo = Math.min(lo, p);
       }
     }
-    if (st.showHarm && r.harm) {
+  }
+  if (st.showHarm && r?.harm) {
+    const ns = r.harm.nodes;
+    const xI = ns[0].index;
+    const dI = ns[4].index;
+    if (dI >= startB && xI <= endB) {
+      for (const nd of ns) {
+        lo = Math.min(lo, nd.price);
+        hi = Math.max(hi, nd.price);
+      }
       lo = Math.min(lo, r.harm.przLo);
       hi = Math.max(hi, r.harm.przHi);
     }
@@ -3143,7 +3314,28 @@ function updateHud() {
   ).textContent =
     nm + dStr + " " + pStr + gStr;
 
-  const { startB } = getVisRange();
+  const {
+    startB,
+    endB
+  } = getVisRange();
+  const bLoc = document.getElementById(
+    "btnLocHarm"
+  );
+  const hm = st.res?.harm;
+  if (st.showHarm && hm) {
+    const xI = hm.nodes[0].index;
+    const dI = hm.nodes[4].index;
+    const outV =
+      xI < startB || dI > endB;
+    const isBk =
+      hm.name.includes("回溯");
+    bLoc.style.display =
+      (outV || isBk)
+      ? "inline-block" : "none";
+  } else {
+    bLoc.style.display = "none";
+  }
+
   const bBack = document.getElementById(
     "btnHistBack"
   );
@@ -3476,6 +3668,10 @@ function initEvents() {
     );
     updVol();
   };
+
+  document.getElementById(
+    "btnLocHarm"
+  ).onclick = focusHarmonic;
 
   document.getElementById(
     "btnHistBack"
