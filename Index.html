@@ -93,6 +93,62 @@ body {
   color: #38bdf8;
   border-color: #075985;
 }
+.ac-wrap {
+  position: relative;
+  display: inline-block;
+}
+.ac-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  width: 295px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #181e29;
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #000;
+  z-index: 99;
+  display: none;
+}
+.ac-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 9px;
+  border-bottom: 1px solid #242b38;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ac-item:hover {
+  background: #253042;
+}
+.ac-sym {
+  font-weight: 700;
+  color: #facc15;
+  min-width: 62px;
+}
+.ac-nm {
+  color: #f1f5f9;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-bdg {
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #064e3b;
+  color: #34d399;
+  white-space: nowrap;
+}
+.ac-otc {
+  background: #27272a;
+  color: #a1a1aa;
+}
 input, select {
   background: #0b0d12;
   color: #fff;
@@ -102,7 +158,7 @@ input, select {
   font-size: 13px;
 }
 input {
-  width: 105px;
+  width: 118px;
   text-transform: uppercase;
 }
 .lbl {
@@ -258,10 +314,16 @@ canvas {
     <select id="presetSel">
       <option value="">自選標的</option>
     </select>
-    <input
-      id="codeInp"
-      value="^HSI"
-      placeholder="輸入代碼">
+    <div class="ac-wrap">
+      <input
+        id="codeInp"
+        value="^HSI"
+        autocomplete="off"
+        placeholder="代碼/名稱">
+      <div
+        class="ac-box"
+        id="acBox"></div>
+    </div>
     <button
       class="btn btn-hi"
       id="btnGo">分析</button>
@@ -434,44 +496,245 @@ canvas {
 </div>
 
 <script>
-const PRESETS = [
-  { s: "^HSI", n: "恒生指數", m: "hk" },
-  { s: "^HSCE", n: "國企指數", m: "hk" },
-  { s: "0700.HK", n: "騰訊控股", m: "hk" },
-  { s: "9988.HK", n: "阿里巴巴", m: "hk" },
-  { s: "0005.HK", n: "匯豐控股", m: "hk" },
-  { s: "0388.HK", n: "香港交易所", m: "hk" },
-  { s: "^IXIC", n: "納斯達克指數", m: "us" },
-  { s: "^GSPC", n: "標普500指數", m: "us" },
-  { s: "^DJI", n: "道瓊斯指數", m: "us" },
-  { s: "AAPL", n: "蘋果", m: "us" },
-  { s: "NVDA", n: "輝達", m: "us" },
-  { s: "TSLA", n: "特斯拉", m: "us" }
+const CATALOG = [
+  {
+    s: "^HSI",
+    n: "恒生指數",
+    ex: "HKEX",
+    tp: "指數",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "^HSCE",
+    n: "國企指數",
+    ex: "HKEX",
+    tp: "指數",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "0700.HK",
+    n: "騰訊控股",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "9988.HK",
+    n: "阿里巴巴-W",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "0005.HK",
+    n: "匯豐控股",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "0388.HK",
+    n: "香港交易所",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "1299.HK",
+    n: "友邦保險",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "3690.HK",
+    n: "美團-W",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "1810.HK",
+    n: "小米集團-W",
+    ex: "HKEX",
+    tp: "股票",
+    m: "hk",
+    otc: false
+  },
+  {
+    s: "^IXIC",
+    n: "納斯達克指數",
+    ex: "NASDAQ",
+    tp: "指數",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "^GSPC",
+    n: "標普500指數",
+    ex: "NYSE",
+    tp: "指數",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "^DJI",
+    n: "道瓊斯指數",
+    ex: "NYSE",
+    tp: "指數",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "AAPL",
+    n: "蘋果公司 Apple",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "APLE",
+    n: "蘋果酒店房託",
+    ex: "NYSE",
+    tp: "REITs",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "NVDA",
+    n: "輝達 NVIDIA",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "NVDL",
+    n: "2倍做多輝達",
+    ex: "NASDAQ",
+    tp: "ETF",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "TSLA",
+    n: "特斯拉 Tesla",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "TSLL",
+    n: "2倍做多特斯拉",
+    ex: "NASDAQ",
+    tp: "ETF",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "TSLQ",
+    n: "2倍做空特斯拉",
+    ex: "NASDAQ",
+    tp: "ETF",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "GOOGL",
+    n: "谷歌 Alphabet A",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "GOOG",
+    n: "谷歌 Alphabet C",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "BRK-B",
+    n: "波克夏 B類股",
+    ex: "NYSE",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "BRK-A",
+    n: "波克夏 A類股",
+    ex: "NYSE",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "MSFT",
+    n: "微軟 Microsoft",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "AMZN",
+    n: "亞馬遜 Amazon",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "META",
+    n: "Meta Platforms",
+    ex: "NASDAQ",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "BABA",
+    n: "阿里巴巴美股",
+    ex: "NYSE",
+    tp: "股票",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "SPY",
+    n: "標普500ETF",
+    ex: "ARCA",
+    tp: "ETF",
+    m: "us",
+    otc: false
+  },
+  {
+    s: "QQQ",
+    n: "納斯達克100ETF",
+    ex: "NASDAQ",
+    tp: "ETF",
+    m: "us",
+    otc: false
+  }
 ];
 
-const NAMES = {
-  "^HSI": "恒生指數",
-  "^HSCE": "國企指數",
-  "^IXIC": "納斯達克指數",
-  "^GSPC": "標普500指數",
-  "^DJI": "道瓊斯指數",
-  "0005.HK": "匯豐控股",
-  "0700.HK": "騰訊控股",
-  "9988.HK": "阿里巴巴",
-  "0388.HK": "香港交易所",
-  "1299.HK": "友邦保險",
-  "3690.HK": "美團",
-  "1810.HK": "小米集團",
-  "0941.HK": "中國移動",
-  "AAPL": "蘋果",
-  "NVDA": "輝達",
-  "TSLA": "特斯拉",
-  "MSFT": "微軟",
-  "GOOGL": "谷歌",
-  "AMZN": "亞馬遜",
-  "META": "Meta",
-  "AMD": "超微半導體"
-};
+const NAMES = {};
+for (const c of CATALOG) {
+  NAMES[c.s] = c.n;
+}
 
 const st = {
   market: "hk",
@@ -493,7 +756,8 @@ const st = {
   panOff: 0,
   moveLine: true,
   reqId: 0,
-  pillBox: null
+  pillBox: null,
+  acTimer: null
 };
 
 function fmt(v) {
@@ -604,7 +868,7 @@ function fillPill(ctx, x, y, w, h, r) {
 }
 
 function normSym(raw, mkt) {
-  const c = raw.trim().toUpperCase();
+  let c = raw.trim().toUpperCase();
   if (!c) {
     return mkt === "hk"
       ? "^HSI" : "^IXIC";
@@ -616,6 +880,8 @@ function normSym(raw, mkt) {
   if (idx.includes(c)) {
     return "^" + c;
   }
+  if (c === "BRK.B") c = "BRK-B";
+  if (c === "BRK.A") c = "BRK-A";
   if (mkt === "hk" &&
     !c.endsWith(".HK") &&
     !c.startsWith("^")) {
@@ -626,6 +892,134 @@ function normSym(raw, mkt) {
     }
   }
   return c;
+}
+
+async function searchStocks(q) {
+  const clean = q.trim();
+  if (!clean) return [];
+  const up = clean.toUpperCase();
+  const list = [];
+  const seen = new Set();
+
+  for (const item of CATALOG) {
+    const mS = item.s
+      .toUpperCase()
+      .includes(up);
+    const mN = item.n
+      .toUpperCase()
+      .includes(up);
+    if (mS || mN) {
+      list.push(item);
+      seen.add(item.s);
+    }
+  }
+
+  try {
+    const url =
+      "/.netlify/functions/yahoo" +
+      "?action=search&q=" +
+      encodeURIComponent(clean);
+    const r = await fetch(url);
+    if (r.ok) {
+      const j = await r.json();
+      const qts = j?.quotes || [];
+      for (const qt of qts) {
+        const sym = qt.symbol;
+        if (!sym || seen.has(sym)) {
+          continue;
+        }
+        const exR = (
+          qt.exchDisp ||
+          qt.exchange || "US"
+        ).toUpperCase();
+        const isHK =
+          sym.endsWith(".HK") ||
+          exR.includes("HKG") ||
+          exR.includes("HKSE");
+        const isOtc =
+          exR.includes("OTC") ||
+          exR.includes("PNK") ||
+          exR.includes("PINK");
+        const tpR = (
+          qt.quoteType || ""
+        ).toUpperCase();
+        let tp = "股票";
+        if (tpR === "ETF") tp = "ETF";
+        if (tpR === "INDEX") tp = "指數";
+        list.push({
+          s: sym,
+          n: NAMES[sym] ||
+            qt.shortname ||
+            qt.longname || sym,
+          ex: isHK
+            ? "HKEX"
+            : (isOtc ? "OTC" : exR),
+          tp,
+          m: isHK ? "hk" : "us",
+          otc: isOtc
+        });
+        seen.add(sym);
+      }
+    }
+  } catch (e) {}
+
+  list.sort((a, b) => {
+    if (a.otc !== b.otc) {
+      return a.otc ? 1 : -1;
+    }
+    return 0;
+  });
+  return list.slice(0, 8);
+}
+
+function renderAc(items) {
+  const box =
+    document.getElementById("acBox");
+  box.innerHTML = "";
+  if (!items || items.length === 0) {
+    box.style.display = "none";
+    return;
+  }
+  for (const it of items) {
+    const row =
+      document.createElement("div");
+    row.className = "ac-item";
+
+    const spS =
+      document.createElement("span");
+    spS.className = "ac-sym";
+    spS.textContent = it.s;
+
+    const spN =
+      document.createElement("span");
+    spN.className = "ac-nm";
+    spN.textContent = it.n;
+
+    const spB =
+      document.createElement("span");
+    spB.className = it.otc
+      ? "ac-bdg ac-otc"
+      : "ac-bdg";
+    spB.textContent =
+      it.ex + "·" + it.tp;
+
+    row.appendChild(spS);
+    row.appendChild(spN);
+    row.appendChild(spB);
+
+    row.onclick = () => {
+      box.style.display = "none";
+      st.market = it.m;
+      setSegVal("mktSeg", it.m);
+      fillPresets();
+      document.getElementById(
+        "codeInp"
+      ).value = it.s;
+      loadSymbol();
+    };
+    box.appendChild(row);
+  }
+  box.style.display = "block";
 }
 
 async function fetchYahoo(sym, iv) {
@@ -2395,7 +2789,7 @@ function fillPresets() {
   );
   sel.innerHTML =
     '<option value="">自選標的</option>';
-  const list = PRESETS.filter(
+  const list = CATALOG.filter(
     p => p.m === st.market
   );
   for (const p of list) {
@@ -2416,6 +2810,9 @@ async function loadSymbol() {
     document.getElementById("errBox");
   const stag =
     document.getElementById("srcTag");
+  document.getElementById(
+    "acBox"
+  ).style.display = "none";
   ld.style.display = "flex";
   eb.style.display = "none";
   eb.classList.remove("warn");
@@ -2565,13 +2962,43 @@ function initEvents() {
     "btnGo"
   ).onclick = loadSymbol;
 
-  document.getElementById(
+  const inp = document.getElementById(
     "codeInp"
-  ).onkeydown = e => {
+  );
+  inp.oninput = () => {
+    clearTimeout(st.acTimer);
+    const val = inp.value.trim();
+    if (!val) {
+      renderAc([]);
+      return;
+    }
+    st.acTimer = setTimeout(
+      async () => {
+        const list =
+          await searchStocks(val);
+        renderAc(list);
+      },
+      220
+    );
+  };
+
+  inp.onkeydown = e => {
     if (e.key === "Enter") {
+      renderAc([]);
       loadSymbol();
     }
   };
+
+  document.addEventListener(
+    "click",
+    e => {
+      if (!e.target.closest(
+        ".ac-wrap"
+      )) {
+        renderAc([]);
+      }
+    }
+  );
 
   const tog = (id, key, fn) => {
     const el =
