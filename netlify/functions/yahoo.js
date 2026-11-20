@@ -124,13 +124,13 @@ async function tryTencent(sym, iv) {
   if (!spec) return null;
 
   let per = "day";
-  let cnt = 1000;
+  let cnt = 1260;
   if (iv === "1wk") {
     per = "week";
     cnt = 800;
   } else if (iv === "1mo") {
     per = "month";
-    cnt = 400;
+    cnt = 500;
   }
 
   for (const tc of spec.codes) {
