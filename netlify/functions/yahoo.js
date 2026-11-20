@@ -50,8 +50,15 @@ function wrapChart(
   return JSON.stringify(obj);
 }
 
+function normBaseSym(sym) {
+  let s = sym.trim().toUpperCase();
+  if (s === "BRK.B") s = "BRK-B";
+  if (s === "BRK.A") s = "BRK-A";
+  return s;
+}
+
 function getTencentSpec(sym) {
-  const s = sym.trim().toUpperCase();
+  const s = normBaseSym(sym);
   if (s === "^HSI") {
     return {
       api: "hkfqkline",
@@ -98,13 +105,14 @@ function getTencentSpec(sym) {
       codes: ["hk" + raw]
     };
   }
-  if (!s.startsWith("^") &&
-    !s.includes(".")) {
+  if (!s.startsWith("^")) {
+    const base = s.replace("-", ".");
     return {
       api: "usfqkline",
       codes: [
-        "us" + s + ".OQ",
-        "us" + s + ".N"
+        "us" + base + ".OQ",
+        "us" + base + ".N",
+        "us" + base + ".P"
       ]
     };
   }
@@ -209,7 +217,7 @@ async function tryTencent(sym, iv) {
 }
 
 function toStooqSym(sym) {
-  const s = sym.trim().toUpperCase();
+  const s = normBaseSym(sym);
   if (s === "^HSI") return "^hsi";
   if (s === "^IXIC") return "^ndq";
   if (s === "^GSPC") return "^spx";
@@ -293,7 +301,8 @@ async function tryYahooDirect(
   iv,
   rng
 ) {
-  const enc = encodeURIComponent(sym);
+  const base = normBaseSym(sym);
+  const enc = encodeURIComponent(base);
   const hosts = [
     "query1.finance.yahoo.com",
     "query2.finance.yahoo.com"
@@ -326,19 +335,52 @@ async function tryYahooDirect(
   return null;
 }
 
+async function tryYahooSearch(q) {
+  const enc = encodeURIComponent(q);
+  const url =
+    "https://query1.finance.yahoo.com" +
+    "/v1/finance/search?q=" + enc +
+    "&quotesCount=10&newsCount=0";
+  const hdr = {
+    "User-Agent": "Mozilla/5.0"
+  };
+  try {
+    const res = await fetchTimeout(
+      url,
+      hdr,
+      4500
+    );
+    if (!res.ok) return '{"quotes":[]}';
+    return await res.text();
+  } catch (e) {
+    return '{"quotes":[]}';
+  }
+}
+
 exports.handler = async (event) => {
   const qs =
     event.queryStringParameters || {};
-  const sym = qs.symbol || "^HSI";
-  const iv = qs.interval || "1wk";
-  const rng = qs.range || "15y";
-
+  const act = qs.action || "chart";
   const corsHdr = {
     "Content-Type":
       "application/json",
     "Access-Control-Allow-Origin":
       "*"
   };
+
+  if (act === "search") {
+    const q = qs.q || "";
+    const body = await tryYahooSearch(q);
+    return {
+      statusCode: 200,
+      headers: corsHdr,
+      body
+    };
+  }
+
+  const sym = qs.symbol || "^HSI";
+  const iv = qs.interval || "1wk";
+  const rng = qs.range || "15y";
 
   try {
     const tq = await tryTencent(
