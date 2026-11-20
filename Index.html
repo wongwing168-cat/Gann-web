@@ -1079,7 +1079,7 @@ async function fetchYahoo(sym, iv) {
   ];
 
   const cKey =
-    "gann_web_" + sym + "_" + iv;
+    "gann_web2_" + sym + "_" + iv;
   const ld =
     document.getElementById("loadBox");
 
@@ -1182,8 +1182,9 @@ function parseYahoo(json, sym) {
 }
 
 function detectSwings(candles) {
-  const his = candles.map(c => c.high);
-  const los = candles.map(c => c.low);
+  const scope = candles.slice(-1260);
+  const his = scope.map(c => c.high);
+  const los = scope.map(c => c.low);
   const hiA = Math.max(...his);
   const loA = Math.min(...los);
   const sp = (hiA - loA) /
@@ -1539,6 +1540,26 @@ function calcTimeHits(
   addCir(topB.id, "歷史大頂");
   addCir(botB.id, "歷史大底");
 
+  if (swings.length > 0) {
+    const rec =
+      swings[swings.length - 1];
+    if (rec.index !== anc.index) {
+      for (const f of [
+        8, 13, 21, 34, 55
+      ]) {
+        const t = rec.index + f;
+        const d = t - lastI;
+        if (d >= 1 && d <= hor) {
+          pushR(
+            t,
+            "次波段第" + f + u,
+            false
+          );
+        }
+      }
+    }
+  }
+
   if (iv === "1d") {
     for (let d = 1; d <= hor; d++) {
       const est = addDays(
@@ -1685,10 +1706,13 @@ function detectHarmonic(
     const ab = Math.abs(
       b.price - a.price
     );
+    const bc = Math.abs(
+      c.price - b.price
+    );
     const ad = Math.abs(
       d.price - a.price
     );
-    if (xa > 0 && ab > 0) {
+    if (xa > 0 && ab > 0 && bc > 0) {
       const rAb = ab / xa;
       const rAd = ad / xa;
       const bull =
@@ -1708,6 +1732,17 @@ function detectHarmonic(
         nm = bull
           ? "看漲伽利222"
           : "看跌伽利222";
+      } else {
+        const cd = Math.abs(
+          d.price - c.price
+        );
+        const cdAb = cd / ab;
+        if (cdAb >= 0.88 &&
+          cdAb <= 1.35) {
+          nm = bull
+            ? "看漲ABCD形態"
+            : "看跌ABCD形態";
+        }
       }
       if (nm) {
         return {
