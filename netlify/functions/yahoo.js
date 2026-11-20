@@ -110,13 +110,109 @@ function getTencentSpec(sym) {
     return {
       api: "usfqkline",
       codes: [
-        "us" + base + ".OQ",
         "us" + base + ".N",
-        "us" + base + ".P"
+        "us" + base + ".OQ",
+        "us" + base + ".P",
+        "us" + base + ".A"
       ]
     };
   }
   return null;
+}
+
+async function fetchOneTencent(
+  tc,
+  api,
+  per,
+  cnt,
+  sym
+) {
+  const p = tc + "," + per +
+    ",,," + cnt + ",qfq";
+  const url =
+    "https://web.ifzq.gtimg.cn" +
+    "/appstock/app/" + api +
+    "/get?param=" +
+    encodeURIComponent(p);
+  try {
+    const res = await fetchTimeout(
+      url,
+      {
+        "User-Agent": "Mozilla/5.0"
+      },
+      6000
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const node = j?.data?.[tc];
+    if (!node) return null;
+
+    const rows =
+      node["qfq" + per] ||
+      node[per];
+    if (!Array.isArray(rows) ||
+      rows.length < 25) {
+      return null;
+    }
+
+    const qtArr = node.qt?.[tc];
+    const cnName =
+      Array.isArray(qtArr) &&
+      qtArr[1]
+        ? String(qtArr[1])
+        : sym;
+
+    const ts = [];
+    const open = [];
+    const high = [];
+    const low = [];
+    const close = [];
+
+    for (const r of rows) {
+      if (!Array.isArray(r) ||
+        r.length < 5) {
+        continue;
+      }
+      const dMs = Date.parse(
+        r[0] + "T00:00:00Z"
+      );
+      const o = parseFloat(r[1]);
+      const c = parseFloat(r[2]);
+      const h = parseFloat(r[3]);
+      const l = parseFloat(r[4]);
+      if (isNaN(dMs) ||
+        isNaN(c)) {
+        continue;
+      }
+      ts.push(
+        Math.floor(dMs / 1000)
+      );
+      open.push(o);
+      high.push(h);
+      low.push(l);
+      close.push(c);
+    }
+
+    if (ts.length < 25) return null;
+    const lastTs = ts[ts.length - 1];
+    const prevTs = ts[ts.length - 2];
+    const gap = lastTs - prevTs;
+    return {
+      lastTs,
+      continuous: gap < 86400 * 45,
+      body: wrapChart(
+        sym,
+        cnName,
+        ts,
+        open,
+        high,
+        low,
+        close
+      )
+    };
+  } catch (e) {
+    return null;
+  }
 }
 
 async function tryTencent(sym, iv) {
@@ -133,87 +229,26 @@ async function tryTencent(sym, iv) {
     cnt = 500;
   }
 
-  for (const tc of spec.codes) {
-    const p = tc + "," + per +
-      ",,," + cnt + ",qfq";
-    const url =
-      "https://web.ifzq.gtimg.cn" +
-      "/appstock/app/" + spec.api +
-      "/get?param=" +
-      encodeURIComponent(p);
-    try {
-      const res = await fetchTimeout(
-        url,
-        {
-          "User-Agent": "Mozilla/5.0"
-        },
-        6000
-      );
-      if (!res.ok) continue;
-      const j = await res.json();
-      const node = j?.data?.[tc];
-      if (!node) continue;
+  const jobs = spec.codes.map(tc =>
+    fetchOneTencent(
+      tc,
+      spec.api,
+      per,
+      cnt,
+      sym
+    )
+  );
+  const all = await Promise.all(jobs);
+  const valid = all.filter(Boolean);
+  if (valid.length === 0) return null;
 
-      const rows =
-        node["qfq" + per] ||
-        node[per];
-      if (!Array.isArray(rows) ||
-        rows.length < 25) {
-        continue;
-      }
-
-      const qtArr = node.qt?.[tc];
-      const cnName =
-        Array.isArray(qtArr) &&
-        qtArr[1]
-          ? String(qtArr[1])
-          : sym;
-
-      const ts = [];
-      const open = [];
-      const high = [];
-      const low = [];
-      const close = [];
-
-      for (const r of rows) {
-        if (!Array.isArray(r) ||
-          r.length < 5) {
-          continue;
-        }
-        const dMs = Date.parse(
-          r[0] + "T00:00:00Z"
-        );
-        const o = parseFloat(r[1]);
-        const c = parseFloat(r[2]);
-        const h = parseFloat(r[3]);
-        const l = parseFloat(r[4]);
-        if (isNaN(dMs) ||
-          isNaN(c)) {
-          continue;
-        }
-        ts.push(
-          Math.floor(dMs / 1000)
-        );
-        open.push(o);
-        high.push(h);
-        low.push(l);
-        close.push(c);
-      }
-
-      if (ts.length >= 25) {
-        return wrapChart(
-          sym,
-          cnName,
-          ts,
-          open,
-          high,
-          low,
-          close
-        );
-      }
-    } catch (e) {}
-  }
-  return null;
+  valid.sort((a, b) => {
+    if (a.continuous !== b.continuous) {
+      return a.continuous ? -1 : 1;
+    }
+    return b.lastTs - a.lastTs;
+  });
+  return valid[0].body;
 }
 
 function toStooqSym(sym) {
