@@ -28,7 +28,8 @@ function wrapChart(
   open,
   high,
   low,
-  close
+  close,
+  volume
 ) {
   const obj = {
     chart: {
@@ -40,7 +41,13 @@ function wrapChart(
           timestamp: ts,
           indicators: {
             quote: [
-              { open, high, low, close }
+              {
+                open,
+                high,
+                low,
+                close,
+                volume: volume || []
+              }
             ]
           }
         }
@@ -167,6 +174,7 @@ async function fetchOneTencent(
     const high = [];
     const low = [];
     const close = [];
+    const volume = [];
 
     for (const r of rows) {
       if (!Array.isArray(r) ||
@@ -180,6 +188,9 @@ async function fetchOneTencent(
       const c = parseFloat(r[2]);
       const h = parseFloat(r[3]);
       const l = parseFloat(r[4]);
+      const v = r.length > 5
+        ? (parseFloat(r[5]) || 0)
+        : 0;
       if (isNaN(dMs) ||
         isNaN(c)) {
         continue;
@@ -191,6 +202,7 @@ async function fetchOneTencent(
       high.push(h);
       low.push(l);
       close.push(c);
+      volume.push(v);
     }
 
     if (ts.length < 25) return null;
@@ -207,7 +219,8 @@ async function fetchOneTencent(
         open,
         high,
         low,
-        close
+        close,
+        volume
       )
     };
   } catch (e) {
@@ -216,6 +229,11 @@ async function fetchOneTencent(
 }
 
 async function tryTencent(sym, iv) {
+  if (iv === "15m" ||
+    iv === "30m" ||
+    iv === "60m") {
+    return null;
+  }
   const spec = getTencentSpec(sym);
   if (!spec) return null;
 
@@ -273,6 +291,11 @@ function toStooqSym(sym) {
 }
 
 async function tryStooq(sym, iv) {
+  if (iv === "15m" ||
+    iv === "30m" ||
+    iv === "60m") {
+    return null;
+  }
   const stSym = toStooqSym(sym);
   let iCode = "d";
   if (iv === "1wk") iCode = "w";
@@ -299,6 +322,7 @@ async function tryStooq(sym, iv) {
   const high = [];
   const low = [];
   const close = [];
+  const volume = [];
 
   for (let i = 1; i < rows.length; i++) {
     const cols = rows[i].split(",");
@@ -310,6 +334,9 @@ async function tryStooq(sym, iv) {
     const h = parseFloat(cols[2]);
     const l = parseFloat(cols[3]);
     const c = parseFloat(cols[4]);
+    const v = cols.length > 5
+      ? (parseFloat(cols[5]) || 0)
+      : 0;
     if (isNaN(dMs) || isNaN(c)) {
       continue;
     }
@@ -318,6 +345,7 @@ async function tryStooq(sym, iv) {
     high.push(h);
     low.push(l);
     close.push(c);
+    volume.push(v);
   }
   if (ts.length < 20) return null;
   return wrapChart(
@@ -327,7 +355,8 @@ async function tryStooq(sym, iv) {
     open,
     high,
     low,
-    close
+    close,
+    volume
   );
 }
 
@@ -353,12 +382,13 @@ async function tryYahooDirect(
       "https://" + h +
       "/v8/finance/chart/" + enc +
       "?range=" + rng +
-      "&interval=" + iv;
+      "&interval=" + iv +
+      "&includePrePost=false";
     try {
       const res = await fetchTimeout(
         url,
         hdr,
-        5500
+        6500
       );
       if (!res.ok) continue;
       const txt = await res.text();
