@@ -384,11 +384,96 @@ async function tryYahooSearch(q) {
   }
 }
 
-let cloudStore = {
+let memStore = {
   barkKey: "",
   ringTone: "alarm",
   alerts: []
 };
+
+const REDIS_KEY = "gann_cloud_v1";
+
+async function loadCloudStore() {
+  const rUrl =
+    process.env.UPSTASH_REDIS_REST_URL;
+  const rTok =
+    process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!rUrl || !rTok) {
+    return memStore;
+  }
+  try {
+    const cleanUrl = rUrl.replace(
+      /\/+$/,
+      ""
+    );
+    const res = await fetchTimeout(
+      cleanUrl + "/get/" + REDIS_KEY,
+      {
+        Authorization:
+          "Bearer " + rTok
+      },
+      4000
+    );
+    if (res.ok) {
+      const j = await res.json();
+      if (j && j.result) {
+        const parsed = JSON.parse(
+          j.result
+        );
+        if (parsed &&
+          Array.isArray(parsed.alerts)) {
+          memStore = parsed;
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {}
+  return memStore;
+}
+
+async function saveCloudStore(
+  store
+) {
+  memStore = store;
+  const rUrl =
+    process.env.UPSTASH_REDIS_REST_URL;
+  const rTok =
+    process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!rUrl || !rTok) {
+    return false;
+  }
+  try {
+    const cleanUrl = rUrl.replace(
+      /\/+$/,
+      ""
+    );
+    const res = await fetchTimeout(
+      cleanUrl + "/set/" + REDIS_KEY,
+      {
+        method: "POST",
+        Authorization:
+          "Bearer " + rTok,
+        "Content-Type":
+          "application/json"
+      },
+      4000
+    );
+    const postRes = await fetch(
+      cleanUrl + "/set/" + REDIS_KEY,
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            "Bearer " + rTok
+        },
+        body: JSON.stringify(store)
+      }
+    );
+    const _ = res;
+    return postRes.ok;
+  } catch (e) {
+    return false;
+  }
+}
 
 async function fetchLatestSpot(sym) {
   const spec = getTencentSpec(sym);
@@ -436,18 +521,18 @@ async function fetchLatestSpot(sym) {
 }
 
 async function pushToBark(
-  barkKey,
+  store,
   item,
   curPrice
 ) {
-  if (!barkKey) return;
+  if (!store.barkKey) return;
   const pStr = Number(curPrice)
     .toFixed(2);
   const tStr = Number(
     item.targetPrice
   ).toFixed(2);
   const snd = encodeURIComponent(
-    cloudStore.ringTone || "alarm"
+    store.ringTone || "alarm"
   );
   const title = encodeURIComponent(
     "🔔 " + item.symbol +
@@ -459,7 +544,7 @@ async function pushToBark(
   );
   const url =
     "https://api.day.app/" +
-    encodeURIComponent(barkKey) +
+    encodeURIComponent(store.barkKey) +
     "/" + title + "/" + body +
     "?sound=" + snd +
     "&level=timeSensitive";
@@ -469,14 +554,15 @@ async function pushToBark(
 }
 
 async function runAlertScan() {
-  const active = cloudStore.alerts
-    .filter(
-      a => a.isEnabled && !a.isTriggered
-    );
+  const store = await loadCloudStore();
+  const active = store.alerts.filter(
+    a => a.isEnabled && !a.isTriggered
+  );
   if (active.length === 0) {
     return {
       scanned: 0,
-      triggered: []
+      triggered: [],
+      alerts: store.alerts
     };
   }
   const needQuote = active.filter(
@@ -500,8 +586,9 @@ async function runAlertScan() {
     hkNow.getUTCHours() * 60 +
     hkNow.getUTCMinutes();
 
+  let changed = false;
   const hitList = [];
-  for (const item of cloudStore.alerts) {
+  for (const item of store.alerts) {
     if (!item.isEnabled ||
       item.isTriggered) {
       continue;
@@ -518,6 +605,7 @@ async function runAlertScan() {
       item.triggeredPrice = curP;
       item.triggeredAt =
         new Date().toISOString();
+      changed = true;
       if (item.notifyMode ===
         "scheduled") {
         item.isPendingDelivery = true;
@@ -526,7 +614,7 @@ async function runAlertScan() {
         item.isEnabled = false;
         hitList.push(item);
         await pushToBark(
-          cloudStore.barkKey,
+          store,
           item,
           curP
         );
@@ -546,21 +634,25 @@ async function runAlertScan() {
         item.isPendingDelivery = false;
         item.isTriggered = true;
         item.isEnabled = false;
+        changed = true;
         hitList.push(item);
         const p = item.triggeredPrice ??
           item.targetPrice;
         await pushToBark(
-          cloudStore.barkKey,
+          store,
           item,
           p
         );
       }
     }
   }
+  if (changed) {
+    await saveCloudStore(store);
+  }
   return {
     scanned: syms.length,
     triggered: hitList,
-    alerts: cloudStore.alerts
+    alerts: store.alerts
   };
 }
 
@@ -576,31 +668,36 @@ exports.handler = async (event) => {
   };
 
   if (act === "sync_alerts") {
+    const store =
+      await loadCloudStore();
     try {
       const payload = JSON.parse(
         event.body || "{}"
       );
       if (payload.barkKey != null) {
-        cloudStore.barkKey =
+        store.barkKey =
           String(payload.barkKey).trim();
       }
       if (payload.ringTone != null) {
-        cloudStore.ringTone =
+        store.ringTone =
           String(payload.ringTone).trim();
       }
       if (Array.isArray(
         payload.alerts
       )) {
-        cloudStore.alerts =
+        store.alerts =
           payload.alerts;
       }
     } catch (e) {}
+    const savedOk =
+      await saveCloudStore(store);
     return {
       statusCode: 200,
       headers: corsHdr,
       body: JSON.stringify({
         ok: true,
-        count: cloudStore.alerts.length
+        persistent: savedOk,
+        count: store.alerts.length
       })
     };
   }
