@@ -678,11 +678,51 @@ canvas {
         style="display:flex;
         flex-wrap:wrap;gap:5px">
       </div>
-      <input
+      <div
+        style="display:flex;
+        align-items:center;
+        gap:6px;flex-wrap:wrap">
+        <span class="lbl">
+          提醒時機:
+        </span>
+        <select
+          id="alModeSel"
+          style="width:112px">
+          <option value="immediate">
+            即時響鬧
+          </option>
+          <option value="scheduled">
+            定時通知
+          </option>
+        </select>
+        <input
+          id="alTimeInp"
+          type="time"
+          value="08:30"
+          style="width:105px;
+          display:none;
+          text-transform:none">
+        <span
+          id="alModeTip"
+          class="lbl"
+          style="color:#fb923c">
+          到價立刻響鬧
+        </span>
+      </div>
+      <textarea
         id="alNoteInp"
+        rows="4"
         style="width:100%;
-        text-transform:none"
-        placeholder="預寫交易方案（例：守穩分批建倉20%，止損設於...）">
+        background:#0b0d12;
+        color:#fff;
+        border:1px solid #334155;
+        border-radius:6px;
+        padding:7px 8px;
+        font-size:13px;
+        line-height:1.45;
+        resize:vertical"
+        placeholder="輸入詳細交易作戰方案（支援多行：進場條件、分批倉位、機械止損與目標位...）"
+      ></textarea>
       <button
         class="btn btn-hi"
         id="btnAddAlert">
@@ -4702,6 +4742,12 @@ function openAlertModal() {
   if (curP > 0) {
     tInp.value = fmt(curP);
   }
+  const mSel = document.getElementById(
+    "alModeSel"
+  );
+  mSel.value = st.market === "us"
+    ? "scheduled" : "immediate";
+  updateAlModeUi();
 
   const qBox = document.getElementById(
     "alQuickFill"
@@ -4779,14 +4825,27 @@ function renderAlertList() {
     const row =
       document.createElement("div");
     row.className = "al-row";
+    const tStr =
+      String(it.schedHour ?? 8)
+        .padStart(2, "0") +
+      ":" +
+      String(it.schedMinute ?? 30)
+        .padStart(2, "0");
+    const mTag =
+      it.notifyMode === "scheduled"
+        ? "定時" + tStr : "即時";
     const stTxt = it.isTriggered
       ? "已觸發"
-      : (it.isEnabled
-        ? "監控中" : "已停用");
+      : (it.isPendingDelivery
+        ? "待" + tStr + "派發"
+        : (it.isEnabled
+          ? "監控中" : "已停用"));
     const stCol = it.isTriggered
       ? "#fb923c"
-      : (it.isEnabled
-        ? "#34d399" : "#94a3b8");
+      : (it.isPendingDelivery
+        ? "#facc15"
+        : (it.isEnabled
+          ? "#34d399" : "#94a3b8"));
 
     const top =
       document.createElement("div");
@@ -4809,6 +4868,16 @@ function renderAlertList() {
     condSp.textContent =
       it.condition + " " +
       fmt(it.targetPrice);
+
+    const modeSp =
+      document.createElement("span");
+    modeSp.style.fontSize = "10px";
+    modeSp.style.padding = "1px 5px";
+    modeSp.style.borderRadius = "4px";
+    modeSp.style.background =
+      "rgba(168,85,247,0.25)";
+    modeSp.style.color = "#c084fc";
+    modeSp.textContent = mTag;
 
     const sp =
       document.createElement("div");
@@ -4834,6 +4903,7 @@ function renderAlertList() {
 
     top.appendChild(symSp);
     top.appendChild(condSp);
+    top.appendChild(modeSp);
     top.appendChild(sp);
     top.appendChild(tag);
     top.appendChild(delB);
@@ -4842,12 +4912,36 @@ function renderAlertList() {
       document.createElement("div");
     note.style.fontSize = "12px";
     note.style.color = "#e2e8f0";
+    note.style.whiteSpace = "pre-wrap";
     note.textContent =
       "方案：" + it.planNote;
 
     row.appendChild(top);
     row.appendChild(note);
     box.appendChild(row);
+  }
+}
+
+function updateAlModeUi() {
+  const mode = document.getElementById(
+    "alModeSel"
+  ).value;
+  const tInp = document.getElementById(
+    "alTimeInp"
+  );
+  const tip = document.getElementById(
+    "alModeTip"
+  );
+  if (mode === "scheduled") {
+    tInp.style.display =
+      "inline-block";
+    tip.textContent =
+      "深夜觸價先暫存，到點派發";
+    tip.style.color = "#38bdf8";
+  } else {
+    tInp.style.display = "none";
+    tip.textContent = "到價立刻響鬧";
+    tip.style.color = "#fb923c";
   }
 }
 
@@ -5027,6 +5121,10 @@ function initEvents() {
   };
 
   document.getElementById(
+    "alModeSel"
+  ).onchange = updateAlModeUi;
+
+  document.getElementById(
     "btnAddAlert"
   ).onclick = () => {
     const val = parseFloat(
@@ -5040,6 +5138,22 @@ function initEvents() {
     const cond = document
       .getElementById("alCondSel")
       .value;
+    const mode = document
+      .getElementById("alModeSel")
+      .value;
+    const tParts = (
+      document.getElementById(
+        "alTimeInp"
+      ).value || "08:30"
+    ).split(":");
+    const sh = parseInt(
+      tParts[0],
+      10
+    ) || 8;
+    const sm = parseInt(
+      tParts[1],
+      10
+    ) || 30;
     const note = document
       .getElementById("alNoteInp")
       .value.trim();
@@ -5050,10 +5164,14 @@ function initEvents() {
       market: st.market,
       targetPrice: val,
       condition: cond,
+      notifyMode: mode,
+      schedHour: sh,
+      schedMinute: sm,
       planNote: note ||
         "執行既定江恩轉勢交易計劃",
       isEnabled: true,
-      isTriggered: false
+      isTriggered: false,
+      isPendingDelivery: false
     });
     document.getElementById(
       "alNoteInp"
