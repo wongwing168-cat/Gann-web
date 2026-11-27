@@ -127,299 +127,136 @@ function getTencentSpec(sym) {
   return null;
 }
 
-async function fetchOneTencent(
-  tc,
-  api,
-  per,
-  cnt,
-  sym
-) {
-  const p = tc + "," + per +
-    ",,," + cnt + ",qfq";
-  const url =
-    "https://web.ifzq.gtimg.cn" +
-    "/appstock/app/" + api +
-    "/get?param=" +
-    encodeURIComponent(p);
-  try {
-    const res = await fetchTimeout(
-      url,
-      {
-        "User-Agent": "Mozilla/5.0"
-      },
-      6000
-    );
-    if (!res.ok) return null;
-    const j = await res.json();
-    const node = j?.data?.[tc];
-    if (!node) return null;
+let cloudStore = {
+  barkKey: "",
+  alerts: []
+};
 
-    const rows =
-      node["qfq" + per] ||
-      node[per];
-    if (!Array.isArray(rows) ||
-      rows.length < 25) {
-      return null;
-    }
-
-    const qtArr = node.qt?.[tc];
-    const cnName =
-      Array.isArray(qtArr) &&
-      qtArr[1]
-        ? String(qtArr[1])
-        : sym;
-
-    const ts = [];
-    const open = [];
-    const high = [];
-    const low = [];
-    const close = [];
-    const volume = [];
-
-    for (const r of rows) {
-      if (!Array.isArray(r) ||
-        r.length < 5) {
-        continue;
-      }
-      const dMs = Date.parse(
-        r[0] + "T00:00:00Z"
-      );
-      const o = parseFloat(r[1]);
-      const c = parseFloat(r[2]);
-      const h = parseFloat(r[3]);
-      const l = parseFloat(r[4]);
-      const v = r.length > 5
-        ? (parseFloat(r[5]) || 0)
-        : 0;
-      if (isNaN(dMs) ||
-        isNaN(c)) {
-        continue;
-      }
-      ts.push(
-        Math.floor(dMs / 1000)
-      );
-      open.push(o);
-      high.push(h);
-      low.push(l);
-      close.push(c);
-      volume.push(v);
-    }
-
-    if (ts.length < 25) return null;
-    const lastTs = ts[ts.length - 1];
-    const prevTs = ts[ts.length - 2];
-    const gap = lastTs - prevTs;
-    return {
-      lastTs,
-      continuous: gap < 86400 * 45,
-      body: wrapChart(
-        sym,
-        cnName,
-        ts,
-        open,
-        high,
-        low,
-        close,
-        volume
-      )
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
-async function tryTencent(sym, iv) {
-  if (iv === "15m" ||
-    iv === "30m" ||
-    iv === "60m") {
-    return null;
-  }
+async function fetchLatestSpot(sym) {
   const spec = getTencentSpec(sym);
-  if (!spec) return null;
-
-  let per = "day";
-  let cnt = 1260;
-  if (iv === "1wk") {
-    per = "week";
-    cnt = 800;
-  } else if (iv === "1mo") {
-    per = "month";
-    cnt = 500;
-  }
-
-  const jobs = spec.codes.map(tc =>
-    fetchOneTencent(
-      tc,
-      spec.api,
-      per,
-      cnt,
-      sym
-    )
-  );
-  const all = await Promise.all(jobs);
-  const valid = all.filter(Boolean);
-  if (valid.length === 0) return null;
-
-  valid.sort((a, b) => {
-    if (a.continuous !== b.continuous) {
-      return a.continuous ? -1 : 1;
-    }
-    return b.lastTs - a.lastTs;
-  });
-  return valid[0].body;
-}
-
-function toStooqSym(sym) {
-  const s = normBaseSym(sym);
-  if (s === "^HSI") return "^hsi";
-  if (s === "^IXIC") return "^ndq";
-  if (s === "^GSPC") return "^spx";
-  if (s === "^DJI") return "^dji";
-  if (s.endsWith(".HK")) {
-    const raw = s.slice(0, -3);
-    const num = parseInt(raw, 10);
-    if (!isNaN(num)) {
-      return num + ".hk";
-    }
-    return raw.toLowerCase() + ".hk";
-  }
-  if (!s.startsWith("^") &&
-    !s.includes(".")) {
-    return s.toLowerCase() + ".us";
-  }
-  return s.toLowerCase();
-}
-
-async function tryStooq(sym, iv) {
-  if (iv === "15m" ||
-    iv === "30m" ||
-    iv === "60m") {
-    return null;
-  }
-  const stSym = toStooqSym(sym);
-  let iCode = "d";
-  if (iv === "1wk") iCode = "w";
-  if (iv === "1mo") iCode = "m";
-  const url =
-    "https://stooq.com/q/d/l/?s=" +
-    encodeURIComponent(stSym) +
-    "&i=" + iCode;
-  const res = await fetchTimeout(
-    url,
-    { "User-Agent": "Mozilla/5.0" },
-    6500
-  );
-  if (!res.ok) return null;
-  const csv = await res.text();
-  if (!csv.startsWith("Date,Open")) {
-    return null;
-  }
-  const rows = csv.trim().split("\n");
-  if (rows.length < 25) return null;
-
-  const ts = [];
-  const open = [];
-  const high = [];
-  const low = [];
-  const close = [];
-  const volume = [];
-
-  for (let i = 1; i < rows.length; i++) {
-    const cols = rows[i].split(",");
-    if (cols.length < 5) continue;
-    const dMs = Date.parse(
-      cols[0] + "T00:00:00Z"
+  if (spec) {
+    const jobs = spec.codes.map(tc =>
+      fetchOneTencent(
+        tc,
+        spec.api,
+        "day",
+        30,
+        sym
+      )
     );
-    const o = parseFloat(cols[1]);
-    const h = parseFloat(cols[2]);
-    const l = parseFloat(cols[3]);
-    const c = parseFloat(cols[4]);
-    const v = cols.length > 5
-      ? (parseFloat(cols[5]) || 0)
-      : 0;
-    if (isNaN(dMs) || isNaN(c)) {
-      continue;
-    }
-    ts.push(Math.floor(dMs / 1000));
-    open.push(o);
-    high.push(h);
-    low.push(l);
-    close.push(c);
-    volume.push(v);
-  }
-  if (ts.length < 20) return null;
-  return wrapChart(
-    sym,
-    sym,
-    ts,
-    open,
-    high,
-    low,
-    close,
-    volume
-  );
-}
-
-async function tryYahooDirect(
-  sym,
-  iv,
-  rng
-) {
-  const base = normBaseSym(sym);
-  const enc = encodeURIComponent(base);
-  const hosts = [
-    "query1.finance.yahoo.com",
-    "query2.finance.yahoo.com"
-  ];
-  const hdr = {
-    "User-Agent":
-      "Mozilla/5.0 (Macintosh; " +
-      "Intel Mac OS X 10_15_7)",
-    Accept: "application/json"
-  };
-  for (const h of hosts) {
-    const url =
-      "https://" + h +
-      "/v8/finance/chart/" + enc +
-      "?range=" + rng +
-      "&interval=" + iv +
-      "&includePrePost=false";
-    try {
-      const res = await fetchTimeout(
-        url,
-        hdr,
-        6500
+    const all = await Promise.all(jobs);
+    const valid = all.filter(Boolean);
+    if (valid.length > 0) {
+      valid.sort(
+        (a, b) => b.lastTs - a.lastTs
       );
-      if (!res.ok) continue;
-      const txt = await res.text();
-      if (txt.includes('"timestamp"')) {
-        return txt;
+      const obj = JSON.parse(
+        valid[0].body
+      );
+      const cls = obj?.chart?.result?.[0]
+        ?.indicators?.quote?.[0]?.close;
+      if (Array.isArray(cls) &&
+        cls.length > 0) {
+        return cls[cls.length - 1];
       }
-    } catch (e) {}
+    }
+  }
+  const yh = await tryYahooDirect(
+    sym,
+    "1d",
+    "5d"
+  );
+  if (yh) {
+    const obj = JSON.parse(yh);
+    const regP = obj?.chart?.result?.[0]
+      ?.meta?.regularMarketPrice;
+    if (typeof regP === "number") {
+      return regP;
+    }
   }
   return null;
 }
 
-async function tryYahooSearch(q) {
-  const enc = encodeURIComponent(q);
+async function pushToBark(
+  barkKey,
+  item,
+  curPrice
+) {
+  if (!barkKey) return;
+  const pStr = Number(curPrice)
+    .toFixed(2);
+  const tStr = Number(
+    item.targetPrice
+  ).toFixed(2);
+  const title = encodeURIComponent(
+    "🔔 " + item.symbol +
+    " 到價 " + pStr
+  );
+  const body = encodeURIComponent(
+    item.condition + " " + tStr +
+    "｜方案：" + item.planNote
+  );
   const url =
-    "https://query1.finance.yahoo.com" +
-    "/v1/finance/search?q=" + enc +
-    "&quotesCount=10&newsCount=0";
-  const hdr = {
-    "User-Agent": "Mozilla/5.0"
-  };
+    "https://api.day.app/" +
+    encodeURIComponent(barkKey) +
+    "/" + title + "/" + body +
+    "?sound=alarm&level=timeSensitive";
   try {
-    const res = await fetchTimeout(
-      url,
-      hdr,
-      4500
+    await fetchTimeout(url, {}, 5000);
+  } catch (e) {}
+}
+
+async function runAlertScan() {
+  const active = cloudStore.alerts
+    .filter(
+      a => a.isEnabled && !a.isTriggered
     );
-    if (!res.ok) return '{"quotes":[]}';
-    return await res.text();
-  } catch (e) {
-    return '{"quotes":[]}';
+  if (active.length === 0) {
+    return {
+      scanned: 0,
+      triggered: []
+    };
   }
+  const syms = [
+    ...new Set(
+      active.map(a => a.symbol)
+    )
+  ];
+  const prices = {};
+  for (const s of syms) {
+    const p = await fetchLatestSpot(s);
+    if (p != null) prices[s] = p;
+  }
+  const hitList = [];
+  for (const item of cloudStore.alerts) {
+    if (!item.isEnabled ||
+      item.isTriggered) {
+      continue;
+    }
+    const curP = prices[item.symbol];
+    if (curP == null) continue;
+    const ok = item.condition === "向上突破"
+      ? curP >= item.targetPrice
+      : curP <= item.targetPrice;
+    if (ok) {
+      item.isTriggered = true;
+      item.isEnabled = false;
+      item.triggeredPrice = curP;
+      item.triggeredAt =
+        new Date().toISOString();
+      hitList.push(item);
+      await pushToBark(
+        cloudStore.barkKey,
+        item,
+        curP
+      );
+    }
+  }
+  return {
+    scanned: syms.length,
+    triggered: hitList,
+    alerts: cloudStore.alerts
+  };
 }
 
 exports.handler = async (event) => {
@@ -432,6 +269,41 @@ exports.handler = async (event) => {
     "Access-Control-Allow-Origin":
       "*"
   };
+
+  if (act === "sync_alerts") {
+    try {
+      const payload = JSON.parse(
+        event.body || "{}"
+      );
+      if (payload.barkKey != null) {
+        cloudStore.barkKey =
+          String(payload.barkKey).trim();
+      }
+      if (Array.isArray(
+        payload.alerts
+      )) {
+        cloudStore.alerts =
+          payload.alerts;
+      }
+    } catch (e) {}
+    return {
+      statusCode: 200,
+      headers: corsHdr,
+      body: JSON.stringify({
+        ok: true,
+        count: cloudStore.alerts.length
+      })
+    };
+  }
+
+  if (act === "check_alerts") {
+    const res = await runAlertScan();
+    return {
+      statusCode: 200,
+      headers: corsHdr,
+      body: JSON.stringify(res)
+    };
+  }
 
   if (act === "search") {
     const q = qs.q || "";
