@@ -1032,6 +1032,3551 @@ const st = {
   ringTimer: null
 };
 
+function isIntraIv(iv) {
+  return (
+    iv === "15m" ||
+    iv === "30m" ||
+    iv === "60m"
+  );
+}
+
+function barMins(iv) {
+  if (iv === "15m") return 15;
+  if (iv === "30m") return 30;
+  if (iv === "60m") return 60;
+  return 1440;
+}
+
+function ivTitle(iv) {
+  if (iv === "15m") return "15分";
+  if (iv === "30m") return "30分";
+  if (iv === "60m") return "1時";
+  if (iv === "1d") return "日線";
+  if (iv === "1wk") return "週線";
+  return "月線";
+}
+
+function approxDays(iv) {
+  if (iv === "15m") return 0.036;
+  if (iv === "30m") return 0.072;
+  if (iv === "60m") return 0.145;
+  if (iv === "1d") return 1.45;
+  if (iv === "1wk") return 7.0;
+  return 30.44;
+}
+
+function unitName(iv) {
+  if (iv === "15m") return "期(15m)";
+  if (iv === "30m") return "期(30m)";
+  if (iv === "60m") return "小時";
+  if (iv === "1d") return "日";
+  if (iv === "1wk") return "週";
+  return "月";
+}
+
+function fmt(v) {
+  return Number(v).toFixed(2);
+}
+
+function fmtAxis(p) {
+  if (p >= 10000) return p.toFixed(0);
+  if (p >= 1000) return p.toFixed(1);
+  return p.toFixed(2);
+}
+
+function fmtDate(ms, withTime) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(
+    d.getUTCMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    d.getUTCDate()
+  ).padStart(2, "0");
+  if (!withTime) {
+    return y + "-" + m + "-" + day;
+  }
+  const hh = String(
+    d.getUTCHours()
+  ).padStart(2, "0");
+  const mm = String(
+    d.getUTCMinutes()
+  ).padStart(2, "0");
+  return (
+    m + "-" + day + " " + hh + ":" + mm
+  );
+}
+
+function addTradingBarsMs(
+  baseMs,
+  bars,
+  iv
+) {
+  let cur = baseMs;
+  const mins = barMins(iv);
+  let left = Math.abs(bars);
+  const dir = bars >= 0 ? 1 : -1;
+  while (left > 0) {
+    cur += dir * mins * 60000;
+    const wd = new Date(cur)
+      .getUTCDay();
+    if (wd === 0 || wd === 6) {
+      continue;
+    }
+    left -= 1;
+  }
+  return cur;
+}
+
+function dateMsForIndex(
+  cs,
+  idx,
+  iv
+) {
+  if (!cs.length) return Date.now();
+  const lastI = cs.length - 1;
+  if (idx >= 0 && idx <= lastI) {
+    return cs[idx].date;
+  }
+  const diff = idx - lastI;
+  if (isIntraIv(iv)) {
+    return addTradingBarsMs(
+      cs[lastI].date,
+      diff,
+      iv
+    );
+  }
+  return (
+    cs[lastI].date +
+    diff * approxDays(iv) * 86400000
+  );
+}
+
+function barTimeDelta(
+  cs,
+  fromIdx,
+  toIdx,
+  iv,
+  tMode
+) {
+  if (
+    isIntraIv(iv) ||
+    tMode === "trading"
+  ) {
+    return toIdx - fromIdx;
+  }
+  const d1 = dateMsForIndex(
+    cs,
+    fromIdx,
+    iv
+  );
+  const d2 = dateMsForIndex(
+    cs,
+    toIdx,
+    iv
+  );
+  const calDays =
+    (d2 - d1) / 86400000;
+  if (iv === "1d") return calDays;
+  if (iv === "1wk") {
+    return calDays / 7.0;
+  }
+  return calDays / 30.4375;
+}
+
+function normalizeSym(raw, mkt) {
+  let c = raw
+    .trim()
+    .toUpperCase();
+  if (!c) {
+    return mkt === "hk"
+      ? "^HSI" : "^IXIC";
+  }
+  if (
+    c === "HSI" ||
+    c === "HSCE" ||
+    c === "IXIC" ||
+    c === "GSPC" ||
+    c === "DJI"
+  ) {
+    return "^" + c;
+  }
+  if (c === "BRK.B") c = "BRK-B";
+  if (c === "BRK.A") c = "BRK-A";
+  if (
+    mkt === "hk" &&
+    !c.endsWith(".HK") &&
+    !c.startsWith("^")
+  ) {
+    const dig = c.replace(/\D/g, "");
+    if (dig) {
+      return (
+        dig.padStart(4, "0") + ".HK"
+      );
+    }
+  }
+  return c;
+}
+
+function resolveName(sym, apiName) {
+  if (NAMES[sym]) return NAMES[sym];
+  if (apiName) return apiName;
+  return "";
+}
+
+function setSegVal(id, val) {
+  const el =
+    document.getElementById(id);
+  if (!el) return;
+  for (const b of el.children) {
+    b.classList.toggle(
+      "on",
+      b.dataset.v === String(val)
+    );
+  }
+}
+
+function bindSeg(id, fn) {
+  const el =
+    document.getElementById(id);
+  if (!el) return;
+  for (const b of el.children) {
+    b.onclick = () => {
+      setSegVal(id, b.dataset.v);
+      fn(b.dataset.v);
+    };
+  }
+}
+
+function syncTimeModeVis() {
+  const tm = document.getElementById(
+    "tModeSeg"
+  );
+  if (tm) {
+    tm.style.display = isIntraIv(
+      st.interval
+    )
+      ? "none" : "inline-flex";
+  }
+}
+
+function restoreState() {
+  try {
+    const sRaw =
+      localStorage.getItem(SAVED_KEY);
+    if (sRaw) {
+      st.saved = JSON.parse(sRaw);
+    }
+  } catch (e) {}
+  if (!Array.isArray(st.saved) ||
+    st.saved.length === 0) {
+    st.saved = [
+      {
+        s: "^HSI",
+        n: "恒生指數",
+        m: "hk"
+      },
+      {
+        s: "0700.HK",
+        n: "騰訊控股",
+        m: "hk"
+      },
+      {
+        s: "^IXIC",
+        n: "納斯達克指數",
+        m: "us"
+      },
+      {
+        s: "AAPL",
+        n: "蘋果公司 Apple",
+        m: "us"
+      }
+    ];
+    persistSaved();
+  }
+  try {
+    const pRaw =
+      localStorage.getItem(PREF_KEY);
+    if (pRaw) {
+      const p = JSON.parse(pRaw);
+      if (p.market) {
+        st.market = p.market;
+      }
+      if (p.code) st.code = p.code;
+      if (p.name != null) {
+        st.name = p.name;
+      }
+      if (p.style) st.style = p.style;
+      if (p.interval) {
+        st.interval = p.interval;
+      }
+      if (p.horizon) {
+        st.horizon = p.horizon;
+      }
+      if (p.dir) st.dir = p.dir;
+      if (p.timeMode) {
+        st.timeMode = p.timeMode;
+      }
+      if (p.volMult) {
+        st.volMult = p.volMult;
+      }
+      if (p.histBars) {
+        st.histBars = p.histBars;
+      }
+      if (p.showSwing != null) {
+        st.showSwing = p.showSwing;
+      }
+      if (p.showGrid != null) {
+        st.showGrid = p.showGrid;
+      }
+      if (p.showFib != null) {
+        st.showFib = p.showFib;
+      }
+      if (p.showHarm != null) {
+        st.showHarm = p.showHarm;
+      }
+    }
+  } catch (e) {}
+
+  document.getElementById(
+    "codeInp"
+  ).value = st.code;
+  setSegVal("mktSeg", st.market);
+  setSegVal("stySeg", st.style);
+  setSegVal("intSeg", st.interval);
+  setSegVal("horSeg", st.horizon);
+  setSegVal("dirSeg", st.dir);
+  setSegVal("tModeSeg", st.timeMode);
+  syncTimeModeVis();
+  document
+    .getElementById("togSwing")
+    .classList.toggle(
+      "on",
+      st.showSwing
+    );
+  document
+    .getElementById("togGrid")
+    .classList.toggle(
+      "on",
+      st.showGrid
+    );
+  document
+    .getElementById("togFib")
+    .classList.toggle(
+      "on",
+      st.showFib
+    );
+  document
+    .getElementById("togHarm")
+    .classList.toggle(
+      "on",
+      st.showHarm
+    );
+  document.getElementById(
+    "volLbl"
+  ).textContent =
+    "波動:" +
+    st.volMult.toFixed(1) + "x";
+}
+
+function savePrefs() {
+  try {
+    localStorage.setItem(
+      PREF_KEY,
+      JSON.stringify({
+        market: st.market,
+        code: st.code,
+        name: st.name,
+        style: st.style,
+        interval: st.interval,
+        horizon: st.horizon,
+        dir: st.dir,
+        timeMode: st.timeMode,
+        volMult: st.volMult,
+        histBars: st.histBars,
+        showSwing: st.showSwing,
+        showGrid: st.showGrid,
+        showFib: st.showFib,
+        showHarm: st.showHarm
+      })
+    );
+  } catch (e) {}
+}
+
+function persistSaved() {
+  try {
+    localStorage.setItem(
+      SAVED_KEY,
+      JSON.stringify(st.saved)
+    );
+  } catch (e) {}
+}
+
+function recordSaved(sym, nm, mkt) {
+  st.saved = st.saved.filter(
+    x => x.s !== sym
+  );
+  st.saved.unshift({
+    s: sym,
+    n: nm || sym,
+    m: mkt
+  });
+  if (st.saved.length > 30) {
+    st.saved = st.saved.slice(0, 30);
+  }
+  persistSaved();
+  fillPresets();
+}
+
+function fillPresets() {
+  const sel = document.getElementById(
+    "presetSel"
+  );
+  sel.innerHTML = "";
+  const defOpt =
+    document.createElement("option");
+  defOpt.value = "";
+  defOpt.textContent =
+    "自選 (" + st.saved.length + ")";
+  sel.appendChild(defOpt);
+  for (const it of st.saved) {
+    const o =
+      document.createElement("option");
+    o.value = it.s;
+    o.textContent =
+      "[" +
+      (it.m === "hk" ? "港" : "美") +
+      "] " + it.s + " " + it.n;
+    if (it.s === st.code) {
+      o.selected = true;
+    }
+    sel.appendChild(o);
+  }
+}
+
+async function searchStocks(q) {
+  const up = q.toUpperCase();
+  const list = [];
+  const seen = new Set();
+  for (const it of CATALOG) {
+    if (
+      it.s.includes(up) ||
+      it.n.toUpperCase().includes(up)
+    ) {
+      list.push(it);
+      seen.add(it.s);
+    }
+  }
+  try {
+    const r = await fetch(
+      "/.netlify/functions/yahoo" +
+      "?action=search&q=" +
+      encodeURIComponent(q)
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const qs = j?.quotes || [];
+      for (const qt of qs) {
+        const s = qt.symbol;
+        if (!s || seen.has(s)) {
+          continue;
+        }
+        const exRaw = (
+          qt.exchDisp ||
+          qt.exchange ||
+          "US"
+        ).toUpperCase();
+        const isHK =
+          s.endsWith(".HK") ||
+          exRaw.includes("HKG") ||
+          exRaw.includes("HKSE");
+        const isOtc =
+          exRaw.includes("OTC") ||
+          exRaw.includes("PNK");
+        const tp =
+          qt.quoteType === "ETF"
+            ? "ETF"
+            : (qt.quoteType === "INDEX"
+              ? "指數" : "股票");
+        list.push({
+          s,
+          n: resolveName(
+            s,
+            qt.shortname || qt.longname
+          ),
+          ex: isHK
+            ? "HKEX"
+            : (isOtc ? "OTC" : exRaw),
+          tp,
+          m: isHK ? "hk" : "us",
+          otc: isOtc
+        });
+        seen.add(s);
+      }
+    }
+  } catch (e) {}
+  return list
+    .sort((a, b) => a.otc - b.otc)
+    .slice(0, 8);
+}
+
+function renderAc(list) {
+  const box =
+    document.getElementById("acBox");
+  box.innerHTML = "";
+  if (!list || list.length === 0) {
+    box.style.display = "none";
+    return;
+  }
+  for (const it of list) {
+    const row =
+      document.createElement("div");
+    row.className = "ac-item";
+
+    const sEl =
+      document.createElement("span");
+    sEl.className = "ac-sym";
+    sEl.textContent = it.s;
+
+    const nEl =
+      document.createElement("span");
+    nEl.className = "ac-nm";
+    nEl.textContent = it.n;
+
+    const bEl =
+      document.createElement("span");
+    bEl.className = it.otc
+      ? "ac-bdg ac-otc" : "ac-bdg";
+    bEl.textContent =
+      it.ex + "·" + it.tp;
+
+    row.appendChild(sEl);
+    row.appendChild(nEl);
+    row.appendChild(bEl);
+    row.onclick = () => {
+      box.style.display = "none";
+      st.market = it.m;
+      setSegVal("mktSeg", it.m);
+      document.getElementById(
+        "codeInp"
+      ).value = it.s;
+      loadSymbol();
+    };
+    box.appendChild(row);
+  }
+  box.style.display = "block";
+}
+
+function parseChartJson(txt, sym) {
+  const obj = JSON.parse(txt);
+  const res =
+    obj?.chart?.result?.[0];
+  if (!res || !res.timestamp) {
+    return null;
+  }
+  const ts = res.timestamp;
+  const q =
+    res.indicators?.quote?.[0];
+  if (!q) return null;
+  const apiNm =
+    res.meta?.shortName ||
+    res.meta?.longName;
+  const candles = [];
+  let idx = 0;
+  for (let i = 0; i < ts.length; i++) {
+    const o = q.open?.[i];
+    const h = q.high?.[i];
+    const l = q.low?.[i];
+    const c = q.close?.[i];
+    if (
+      o == null ||
+      h == null ||
+      l == null ||
+      c == null
+    ) {
+      continue;
+    }
+    candles.push({
+      id: idx++,
+      date: ts[i] * 1000,
+      open: o,
+      high: h,
+      low: l,
+      close: c,
+      volume: q.volume?.[i] || 0
+    });
+  }
+  if (candles.length < 15) {
+    return null;
+  }
+  return {
+    name: resolveName(sym, apiNm),
+    candles
+  };
+}
+
+async function fetchOneSeries(
+  sym,
+  iv
+) {
+  let rng = "5y";
+  if (iv === "15m") rng = "30d";
+  else if (iv === "30m") rng = "60d";
+  else if (iv === "60m") rng = "180d";
+  else if (iv === "1wk") rng = "15y";
+  else if (iv === "1mo") rng = "max";
+
+  const cacheK =
+    "gann_web_c4_" + sym + "_" + iv;
+  const url =
+    "/.netlify/functions/yahoo" +
+    "?symbol=" +
+    encodeURIComponent(sym) +
+    "&interval=" + iv +
+    "&range=" + rng;
+  try {
+    const r = await fetch(url);
+    if (r.ok) {
+      const txt = await r.text();
+      const parsed = parseChartJson(
+        txt,
+        sym
+      );
+      if (parsed) {
+        try {
+          localStorage.setItem(
+            cacheK,
+            JSON.stringify(parsed)
+          );
+        } catch (e) {}
+        return {
+          parsed,
+          src:
+            r.headers.get("X-Source") ||
+            "雲端連線"
+        };
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const raw =
+      localStorage.getItem(cacheK);
+    if (raw) {
+      return {
+        parsed: JSON.parse(raw),
+        src: "離線快取"
+      };
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function loadSymbol() {
+  const myReq = ++st.reqId;
+  const raw = document.getElementById(
+    "codeInp"
+  ).value;
+  const sym = normalizeSym(
+    raw,
+    st.market
+  );
+  document.getElementById(
+    "codeInp"
+  ).value = sym;
+  st.code = sym;
+  st.name = resolveName(sym, "");
+  st.customAnc = null;
+  st.selBar = null;
+  st.panOff = 0;
+
+  const loadBox =
+    document.getElementById("loadBox");
+  const errBox =
+    document.getElementById("errBox");
+  loadBox.style.display = "flex";
+  errBox.style.display = "none";
+
+  const hit = await fetchOneSeries(
+    sym,
+    st.interval
+  );
+  if (myReq !== st.reqId) return;
+
+  if (!hit) {
+    loadBox.style.display = "none";
+    errBox.className = "err";
+    errBox.textContent =
+      "報價讀取失敗，請檢查代碼：" +
+      sym;
+    errBox.style.display = "block";
+    return;
+  }
+
+  st.candles = hit.parsed.candles;
+  if (hit.parsed.name) {
+    st.name = hit.parsed.name;
+  }
+
+  if (st.interval === "1d") {
+    st.dailyCandles = st.candles;
+  } else if (isIntraIv(st.interval)) {
+    const dHit = await fetchOneSeries(
+      sym,
+      "1d"
+    );
+    if (myReq !== st.reqId) return;
+    st.dailyCandles = dHit
+      ? dHit.parsed.candles : [];
+  }
+
+  loadBox.style.display = "none";
+  const srcTag =
+    document.getElementById("srcTag");
+  srcTag.textContent =
+    hit.src === "離線快取"
+      ? "離線快取"
+      : "雲端:" + hit.src;
+  if (hit.src === "離線快取") {
+    errBox.className = "err warn";
+    errBox.textContent =
+      "當前顯示本地快取歷史數據";
+    errBox.style.display = "block";
+  }
+
+  recordSaved(
+    sym,
+    st.name,
+    st.market
+  );
+  savePrefs();
+  runAnalysis();
+}
+
+function detectSwings(cs, iv) {
+  let hiAll = -Infinity;
+  let loAll = Infinity;
+  for (const c of cs) {
+    if (c.high > hiAll) hiAll = c.high;
+    if (c.low < loAll) loAll = c.low;
+  }
+  const span =
+    (hiAll - loAll) /
+    Math.max(0.01, loAll);
+  const intra = isIntraIv(iv);
+  const minTh = intra ? 0.006 : 0.025;
+  const maxTh = intra ? 0.045 : 0.12;
+  const mult = intra ? 0.10 : 0.14;
+  const thresh = Math.max(
+    minTh,
+    Math.min(maxTh, span * mult)
+  );
+  const pts = [];
+  let mode = 0;
+  let curHi = cs[0].high;
+  let curHiI = 0;
+  let curLo = cs[0].low;
+  let curLoI = 0;
+
+  for (const c of cs) {
+    if (c.high > curHi) {
+      curHi = c.high;
+      curHiI = c.id;
+    }
+    if (c.low < curLo) {
+      curLo = c.low;
+      curLoI = c.id;
+    }
+    if (mode === 0) {
+      const upM =
+        (c.high - curLo) /
+        Math.max(0.001, curLo);
+      const dnM =
+        (curHi - c.low) /
+        Math.max(0.001, curHi);
+      if (upM >= thresh) {
+        pts.push({
+          index: curLoI,
+          date: cs[curLoI].date,
+          price: curLo,
+          isHigh: false
+        });
+        mode = 1;
+        curHi = c.high;
+        curHiI = c.id;
+      } else if (dnM >= thresh) {
+        pts.push({
+          index: curHiI,
+          date: cs[curHiI].date,
+          price: curHi,
+          isHigh: true
+        });
+        mode = -1;
+        curLo = c.low;
+        curLoI = c.id;
+      }
+    } else if (mode === 1) {
+      const drop =
+        (curHi - c.low) /
+        Math.max(0.001, curHi);
+      if (drop >= thresh) {
+        pts.push({
+          index: curHiI,
+          date: cs[curHiI].date,
+          price: curHi,
+          isHigh: true
+        });
+        mode = -1;
+        curLo = c.low;
+        curLoI = c.id;
+      }
+    } else {
+      const rise =
+        (c.high - curLo) /
+        Math.max(0.001, curLo);
+      if (rise >= thresh) {
+        pts.push({
+          index: curLoI,
+          date: cs[curLoI].date,
+          price: curLo,
+          isHigh: false
+        });
+        mode = 1;
+        curHi = c.high;
+        curHiI = c.id;
+      }
+    }
+  }
+  return pts;
+}
+
+function buildMechSwings(cs, order) {
+  if (cs.length < 3) return [];
+  const act = [cs[0]];
+  for (let i = 1; i < cs.length; i++) {
+    const c = cs[i];
+    const p = act[act.length - 1];
+    if (
+      !(c.high <= p.high &&
+        c.low >= p.low)
+    ) {
+      act.push(c);
+    }
+  }
+  if (act.length < 3) return [];
+  const res = [];
+  let dir = 0;
+  let upC = 0;
+  let dnC = 0;
+  let extH = act[0];
+  let extL = act[0];
+
+  for (let i = 1; i < act.length; i++) {
+    const c = act[i];
+    const p = act[i - 1];
+    const hh = c.high > p.high;
+    const ll = c.low < p.low;
+    if (hh && !ll) {
+      upC += 1;
+      dnC = 0;
+    } else if (ll && !hh) {
+      dnC += 1;
+      upC = 0;
+    }
+    if (dir === 0) {
+      if (upC >= order) {
+        res.push({
+          index: extL.id,
+          date: extL.date,
+          price: extL.low,
+          isHigh: false
+        });
+        dir = 1;
+        extH = c;
+      } else if (dnC >= order) {
+        res.push({
+          index: extH.id,
+          date: extH.date,
+          price: extH.high,
+          isHigh: true
+        });
+        dir = -1;
+        extL = c;
+      } else {
+        if (c.high > extH.high) {
+          extH = c;
+        }
+        if (c.low < extL.low) {
+          extL = c;
+        }
+      }
+    } else if (dir === 1) {
+      if (c.high >= extH.high) {
+        extH = c;
+      }
+      if (dnC >= order) {
+        res.push({
+          index: extH.id,
+          date: extH.date,
+          price: extH.high,
+          isHigh: true
+        });
+        dir = -1;
+        extL = c;
+      }
+    } else {
+      if (c.low <= extL.low) {
+        extL = c;
+      }
+      if (upC >= order) {
+        res.push({
+          index: extL.id,
+          date: extL.date,
+          price: extL.low,
+          isHigh: false
+        });
+        dir = 1;
+        extH = c;
+      }
+    }
+  }
+  const tail = dir >= 0 ? extH : extL;
+  if (
+    !res.length ||
+    res[res.length - 1].index !==
+      tail.id
+  ) {
+    res.push({
+      index: tail.id,
+      date: tail.date,
+      price: dir >= 0
+        ? tail.high : tail.low,
+      isHigh: dir >= 0
+    });
+  }
+  return res;
+}
+
+function pickAnchor(
+  cs,
+  swings,
+  custIdx,
+  dir
+) {
+  if (
+    custIdx != null &&
+    custIdx >= 0 &&
+    custIdx < cs.length
+  ) {
+    const c = cs[custIdx];
+    let isH = false;
+    if (dir === "up") isH = false;
+    else if (dir === "down") {
+      isH = true;
+    } else {
+      isH =
+        c.close <
+        (c.high + c.low) / 2;
+    }
+    return {
+      index: custIdx,
+      date: c.date,
+      price: isH ? c.high : c.low,
+      isHigh: isH
+    };
+  }
+  const look = Math.min(
+    cs.length,
+    160
+  );
+  const start = cs.length - look;
+  const rec = swings.filter(
+    s =>
+      s.index >= start &&
+      s.index < cs.length - 5
+  );
+  if (dir === "up") {
+    const lo = [...rec]
+      .reverse()
+      .find(s => !s.isHigh);
+    if (lo) return lo;
+  } else if (dir === "down") {
+    const hi = [...rec]
+      .reverse()
+      .find(s => s.isHigh);
+    if (hi) return hi;
+  } else if (rec.length > 0) {
+    return rec[rec.length - 1];
+  }
+
+  let best = cs[start];
+  for (
+    let i = start + 1;
+    i < cs.length;
+    i++
+  ) {
+    if (dir === "down") {
+      if (cs[i].high > best.high) {
+        best = cs[i];
+      }
+    } else {
+      if (cs[i].low < best.low) {
+        best = cs[i];
+      }
+    }
+  }
+  const isH = dir === "down";
+  return {
+    index: best.id,
+    date: best.date,
+    price: isH
+      ? best.high : best.low,
+    isHigh: isH
+  };
+}
+
+function calcVol(
+  cs,
+  anc,
+  swings,
+  iv,
+  tMode
+) {
+  const after = swings.filter(
+    s => s.index > anc.index + 3
+  );
+  if (after.length > 0) {
+    const nxt = after[0];
+    const dp = Math.abs(
+      nxt.price - anc.price
+    );
+    const dt = Math.abs(
+      barTimeDelta(
+        cs,
+        anc.index,
+        nxt.index,
+        iv,
+        tMode
+      )
+    );
+    return dp / Math.max(1, dt);
+  }
+  const last = cs[cs.length - 1];
+  const dp = Math.abs(
+    last.close - anc.price
+  );
+  const dt = Math.abs(
+    barTimeDelta(
+      cs,
+      anc.index,
+      last.id,
+      iv,
+      tMode
+    )
+  );
+  return dp / Math.max(1, dt);
+}
+
+function buildRays(
+  cs,
+  anc,
+  isUp,
+  vol,
+  endIdx,
+  iv,
+  tMode
+) {
+  const specs = [
+    ["8x1", 8.0],
+    ["4x1", 4.0],
+    ["3x1", 3.0],
+    ["2x1", 2.0],
+    ["1x1", 1.0],
+    ["1x2", 0.5],
+    ["1x3", 1 / 3],
+    ["1x4", 0.25],
+    ["1x8", 0.125]
+  ];
+  const s = isUp ? 1 : -1;
+  return specs.map(([nm, r]) => {
+    const pts = [];
+    const step = Math.max(
+      1,
+      Math.floor(
+        (endIdx - anc.index) / 60
+      )
+    );
+    for (
+      let i = anc.index;
+      i <= endIdx;
+      i += step
+    ) {
+      const dt = barTimeDelta(
+        cs,
+        anc.index,
+        i,
+        iv,
+        tMode
+      );
+      const p =
+        anc.price + s * vol * r * dt;
+      if (p >= 0) {
+        pts.push({
+          barIndex: i,
+          price: p
+        });
+      }
+    }
+    if (
+      pts.length &&
+      pts[pts.length - 1].barIndex <
+        endIdx
+    ) {
+      const dt = barTimeDelta(
+        cs,
+        anc.index,
+        endIdx,
+        iv,
+        tMode
+      );
+      pts.push({
+        barIndex: endIdx,
+        price: Math.max(
+          0,
+          anc.price + s * vol * r * dt
+        )
+      });
+    }
+    return {
+      name: nm,
+      ratio: r,
+      isPrimary: nm === "1x1",
+      points: pts
+    };
+  });
+}
+
+function moonEvent(ms) {
+  const ref = 947182440000;
+  const syn = 29.53058867;
+  const diff = (ms - ref) / 86400000;
+  let ph = diff % syn;
+  if (ph < 0) ph += syn;
+  if (ph <= 1.0 || ph >= syn - 1.0) {
+    return "天文新月窗口";
+  }
+  if (
+    Math.abs(ph - syn / 2) <= 1.0
+  ) {
+    return "天文滿月窗口";
+  }
+  return null;
+}
+
+function solarTerm(ms) {
+  const d = new Date(ms);
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  const terms = [
+    [2, 4, "立春節氣(45度)"],
+    [3, 21, "春分節氣(0度)"],
+    [5, 6, "立夏節氣(45度)"],
+    [6, 21, "夏至節氣(90度)"],
+    [8, 8, "立秋節氣(135度)"],
+    [9, 23, "秋分節氣(180度)"],
+    [11, 7, "立冬節氣(225度)"],
+    [12, 22, "冬至節氣(270度)"]
+  ];
+  for (const [tm, td, nm] of terms) {
+    if (
+      m === tm &&
+      Math.abs(day - td) <= 1
+    ) {
+      return nm;
+    }
+  }
+  return null;
+}
+
+function calcTimeHits(
+  cs,
+  anc,
+  swings,
+  vol,
+  horizon,
+  iv,
+  tMode
+) {
+  const intra = isIntraIv(iv);
+  const fibs = intra
+    ? [5, 8, 13, 21, 34, 55, 89, 144]
+    : [
+      5, 8, 13, 21, 34,
+      55, 89, 144, 233
+    ];
+  const g7 = intra
+    ? [
+      7, 12, 14, 18, 21, 24, 28,
+      30, 42, 45, 49, 60, 72, 90
+    ]
+    : [
+      7, 14, 28, 30, 42, 45, 49, 60,
+      77, 90, 120, 144, 180, 270, 360
+    ];
+  const lastI = cs.length - 1;
+  const lastD = cs[lastI].date;
+  const map = new Map();
+  const majSet = new Set();
+  const unit =
+    tMode === "calendar" &&
+    iv === "1d"
+      ? "自然日" : unitName(iv);
+  const mSuf =
+    tMode === "calendar" && !intra
+      ? "(自然日)" : "";
+
+  const add = (t, msg, isMaj) => {
+    const d = t - lastI;
+    if (d < 1 || d > horizon) return;
+    if (!map.has(t)) map.set(t, []);
+    map.get(t).push(msg);
+    if (isMaj) majSet.add(t);
+  };
+
+  const mapBar = (baseI, cnt) => {
+    if (
+      intra ||
+      tMode === "trading"
+    ) {
+      return baseI + cnt;
+    }
+    const bMs = dateMsForIndex(
+      cs,
+      baseI,
+      iv
+    );
+    const stepD =
+      iv === "1d"
+        ? 1.0
+        : (iv === "1wk"
+          ? 7.0 : 30.4375);
+    const tMs =
+      bMs + cnt * stepD * 86400000;
+    const off = Math.round(
+      (tMs - lastD) /
+      (approxDays(iv) * 86400000)
+    );
+    return lastI + off;
+  };
+
+  for (const f of fibs) {
+    add(
+      mapBar(anc.index, f),
+      "費波那契第" + f + unit,
+      false
+    );
+  }
+  for (const g of g7) {
+    let note = "";
+    if (iv === "60m" && g === 24) {
+      note = "(360度日循環)";
+    } else if (
+      iv === "60m" &&
+      g === 49
+    ) {
+      note = "(7x7短線周期)";
+    } else if (
+      iv === "30m" &&
+      g === 48
+    ) {
+      note = "(24小時360度)";
+    }
+    const isMaj = intra
+      ? [
+        21, 24, 30, 49, 60, 90
+      ].includes(g)
+      : [
+        90, 180, 270, 360
+      ].includes(g);
+    add(
+      mapBar(anc.index, g),
+      "江恩神奇數" + g + unit + note,
+      isMaj
+    );
+  }
+
+  if (!intra && vol > 0) {
+    const sqU = Math.round(
+      anc.price / vol
+    );
+    add(
+      mapBar(anc.index, sqU),
+      "零度線時價成正方" + mSuf,
+      true
+    );
+  }
+
+  if (swings.length >= 2 && vol > 0) {
+    const prevS =
+      swings[swings.length - 2];
+    if (prevS.isHigh !== anc.isHigh) {
+      const pDiff = Math.abs(
+        prevS.price - anc.price
+      );
+      const crU = Math.round(
+        pDiff / (2 * vol)
+      );
+      const midB = Math.floor(
+        (prevS.index + anc.index) / 2
+      );
+      add(
+        mapBar(midB, crU),
+        "雙1x1角度線幾何交叉",
+        true
+      );
+    }
+  }
+
+  if (!intra) {
+    const safeEnd = Math.max(
+      1,
+      lastI - 4
+    );
+    let topB = cs[0];
+    let botB = cs[0];
+    for (
+      let i = 1;
+      i < safeEnd;
+      i++
+    ) {
+      if (cs[i].high > topB.high) {
+        topB = cs[i];
+      }
+      if (cs[i].low < botB.low) {
+        botB = cs[i];
+      }
+    }
+    const csList =
+      iv === "1mo"
+        ? [60, 90, 120, 180, 240, 360]
+        : [90, 180, 270, 360];
+    for (const c of csList) {
+      let note = "";
+      if (iv === "1wk" && c === 180) {
+        note = "(約3.5年)";
+      } else if (
+        iv === "1wk" &&
+        c === 360
+      ) {
+        note = "(約7年)";
+      } else if (
+        iv === "1mo" &&
+        c === 120
+      ) {
+        note = "(10年周期)";
+      } else if (
+        iv === "1mo" &&
+        c === 360
+      ) {
+        note = "(30年土星)";
+      }
+      add(
+        mapBar(topB.id, c),
+        "歷史大頂滿" + c + unit + note,
+        true
+      );
+      add(
+        mapBar(botB.id, c),
+        "歷史大底滿" + c + unit + note,
+        true
+      );
+    }
+  }
+
+  if (swings.length > 0) {
+    const rec =
+      swings[swings.length - 1];
+    if (rec.index !== anc.index) {
+      const subN = intra
+        ? [7, 12, 18, 21, 30]
+        : [8, 13, 21, 34, 55];
+      for (const f of subN) {
+        add(
+          mapBar(rec.index, f),
+          "次波段第" + f + unit,
+          false
+        );
+      }
+    }
+  }
+
+  if (iv === "1d") {
+    for (
+      let d = 1;
+      d <= horizon;
+      d++
+    ) {
+      const est =
+        lastD +
+        d * approxDays(iv) * 86400000;
+      const mn = moonEvent(est);
+      if (mn) add(lastI + d, mn, false);
+      const tm = solarTerm(est);
+      if (tm) add(lastI + d, tm, false);
+    }
+  }
+
+  const hits = [];
+  const keys = [
+    ...map.keys()
+  ].sort((a, b) => a - b);
+  for (const k of keys) {
+    const rs = map.get(k);
+    const isMaj = majSet.has(k);
+    const keyNum = rs.some(
+      s =>
+        s.includes("18") ||
+        s.includes("21") ||
+        s.includes("30") ||
+        s.includes("49") ||
+        s.includes("55") ||
+        s.includes("89") ||
+        s.includes("90") ||
+        s.includes("144") ||
+        s.includes("180") ||
+        s.includes("360") ||
+        s.includes("正方") ||
+        s.includes("交叉")
+    );
+    if (
+      isMaj ||
+      rs.length >= 2 ||
+      keyNum
+    ) {
+      hits.push({
+        targetIndex: k,
+        estDate: dateMsForIndex(
+          cs,
+          k,
+          iv
+        ),
+        reasons: rs,
+        strength: rs.length,
+        isMajor: isMaj
+      });
+    }
+  }
+  return hits;
+}
+
+function calcFibsAndGrid(cs) {
+  const sub = cs.slice(-260);
+  let hi = -Infinity;
+  let lo = Infinity;
+  for (const c of sub) {
+    if (c.high > hi) hi = c.high;
+    if (c.low < lo) lo = c.low;
+  }
+  const span = hi - lo;
+  const gm = Math.sqrt(
+    Math.max(0.01, hi * lo)
+  );
+  const fR = [
+    0.236, 0.382, 0.5,
+    0.618, 0.786, 1.272
+  ];
+  const fibs = fR.map(r => ({
+    ratio: r,
+    label:
+      "黃金" + Math.round(r * 1000),
+    price: hi - span * r
+  }));
+  const gSpecs = [
+    [0.125, "1/8(12.5%)", false],
+    [0.25, "2/8(25%)", true],
+    [1 / 3, "1/3(33.3%)", true],
+    [0.375, "3/8(37.5%)", false],
+    [0.5, "4/8(50%中軸)", true],
+    [0.625, "5/8(62.5%)", false],
+    [2 / 3, "2/3(66.7%)", true],
+    [0.75, "6/8(75%)", true],
+    [0.875, "7/8(87.5%)", false],
+    [1.125, "延伸112.5%", false],
+    [4 / 3, "延伸133.3%", false],
+    [5 / 3, "延伸166.7%", false],
+    [2.0, "延伸200%", false]
+  ];
+  const pcts = gSpecs.map(
+    ([r, lbl, maj]) => ({
+      ratio: r,
+      label: lbl,
+      price: lo + span * r,
+      isMajor: maj
+    })
+  );
+  return { fibs, pcts, gm };
+}
+
+function checkCompValid(
+  cs,
+  dIdx,
+  isBull,
+  xP,
+  przLo,
+  przHi
+) {
+  const start = dIdx + 1;
+  if (start >= cs.length) {
+    return [true, true];
+  }
+  let brokeAt = -1;
+  if (isBull) {
+    const fl = Math.min(
+      przLo * 0.985,
+      xP * 0.99
+    );
+    for (
+      let i = start;
+      i < cs.length;
+      i++
+    ) {
+      if (cs[i].low < fl) {
+        brokeAt = i;
+        break;
+      }
+    }
+  } else {
+    const cl = Math.max(
+      przHi * 1.015,
+      xP * 1.01
+    );
+    for (
+      let i = start;
+      i < cs.length;
+      i++
+    ) {
+      if (cs[i].high > cl) {
+        brokeAt = i;
+        break;
+      }
+    }
+  }
+  if (brokeAt === -1) {
+    return [true, true];
+  }
+  return [
+    brokeAt - dIdx >= 4,
+    false
+  ];
+}
+
+function evalXABCD(
+  x,
+  a,
+  b,
+  c,
+  d,
+  cs,
+  isBack
+) {
+  const isBull =
+    !x.isHigh && a.isHigh;
+  if (isBull) {
+    const ok =
+      a.isHigh &&
+      !b.isHigh &&
+      c.isHigh &&
+      !d.isHigh &&
+      a.price > c.price &&
+      c.price > b.price &&
+      b.price > d.price;
+    if (!ok) return null;
+  } else {
+    const ok =
+      !a.isHigh &&
+      b.isHigh &&
+      !c.isHigh &&
+      d.isHigh &&
+      a.price < c.price &&
+      c.price < b.price &&
+      b.price < d.price;
+    if (!ok) return null;
+  }
+  const xa = Math.abs(
+    a.price - x.price
+  );
+  const ab = Math.abs(
+    b.price - a.price
+  );
+  const bc = Math.abs(
+    c.price - b.price
+  );
+  const ad = Math.abs(
+    d.price - a.price
+  );
+  if (xa <= 0 || ab <= 0 || bc <= 0) {
+    return null;
+  }
+  const abR = ab / xa;
+  const adR = ad / xa;
+  let nm = "";
+  if (
+    abR >= 0.35 &&
+    abR <= 0.54 &&
+    adR >= 0.82 &&
+    adR <= 0.94
+  ) {
+    nm = isBull
+      ? "看漲蝙蝠形態"
+      : "看跌蝙蝠形態";
+  } else if (
+    abR >= 0.55 &&
+    abR <= 0.68 &&
+    adR >= 0.73 &&
+    adR <= 0.84
+  ) {
+    nm = isBull
+      ? "看漲伽利222"
+      : "看跌伽利222";
+  } else {
+    const cd = Math.abs(
+      d.price - c.price
+    );
+    const cdAb = cd / ab;
+    if (
+      cdAb >= 0.88 &&
+      cdAb <= 1.35
+    ) {
+      nm = isBull
+        ? "看漲ABCD形態"
+        : "看跌ABCD形態";
+    }
+  }
+  if (!nm) return null;
+  const przLo = d.price * 0.985;
+  const przHi = d.price * 1.015;
+  const chk = checkCompValid(
+    cs,
+    d.index,
+    isBull,
+    x.price,
+    przLo,
+    przHi
+  );
+  if (!chk[0]) return null;
+  return [
+    {
+      name:
+        nm + (isBack ? "(回溯)" : ""),
+      isBull,
+      isComp: true,
+      nodes: [x, a, b, c, d],
+      przLo,
+      przHi,
+      dIdx: d.index,
+      dDate: d.date
+    },
+    chk[1]
+  ];
+}
+
+function checkProjValid(
+  cs,
+  fromI,
+  isBull,
+  xP,
+  bP,
+  cP,
+  przLo,
+  przHi,
+  extLim
+) {
+  for (
+    let i = fromI;
+    i < cs.length;
+    i++
+  ) {
+    const bar = cs[i];
+    if (isBull) {
+      const fl = Math.min(
+        przLo,
+        extLim
+      );
+      if (
+        bar.low < fl ||
+        bar.low < xP ||
+        bar.high > cP
+      ) {
+        return false;
+      }
+    } else {
+      const cl = Math.max(
+        przHi,
+        extLim
+      );
+      if (
+        bar.low < bP ||
+        bar.low < cP ||
+        bar.high > cl ||
+        bar.high > xP
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function projFromXABC(
+  x,
+  a,
+  b,
+  c,
+  cs,
+  lastI,
+  lastD,
+  stepD
+) {
+  const xa = Math.abs(
+    a.price - x.price
+  );
+  const ab = Math.abs(
+    b.price - a.price
+  );
+  if (xa <= 0 || ab <= 0) return null;
+  const abR = ab / xa;
+  const isBull =
+    !x.isHigh && a.isHigh;
+  let nm = "";
+  let bcR = 1.272;
+  if (abR >= 0.35 && abR <= 0.54) {
+    nm = isBull
+      ? "潛在看漲蝙蝠222"
+      : "潛在看跌蝙蝠222";
+    bcR = 1.618;
+  } else if (
+    abR >= 0.55 &&
+    abR <= 0.72
+  ) {
+    nm = isBull
+      ? "潛在看漲伽利222"
+      : "潛在看跌伽利222";
+    bcR = 1.272;
+  } else {
+    nm = isBull
+      ? "潛在看漲ABCD"
+      : "潛在看跌ABCD";
+    bcR = 1.272;
+  }
+
+  let dP = 0;
+  let ext1618 = 0;
+  if (isBull) {
+    const cb = c.price - b.price;
+    if (
+      !(
+        a.isHigh &&
+        !b.isHigh &&
+        c.isHigh &&
+        cb > 0
+      )
+    ) {
+      return null;
+    }
+    dP = c.price - bcR * cb;
+    ext1618 = c.price - 1.618 * cb;
+    if (
+      !(
+        dP > 0 &&
+        a.price > c.price &&
+        c.price > b.price &&
+        b.price > dP
+      )
+    ) {
+      return null;
+    }
+  } else {
+    const bc = b.price - c.price;
+    if (
+      !(
+        !a.isHigh &&
+        b.isHigh &&
+        !c.isHigh &&
+        bc > 0
+      )
+    ) {
+      return null;
+    }
+    dP = c.price + bcR * bc;
+    ext1618 = c.price + 1.618 * bc;
+    if (
+      !(
+        a.price < c.price &&
+        c.price < b.price &&
+        b.price < dP
+      )
+    ) {
+      return null;
+    }
+  }
+
+  const przLo = dP * 0.985;
+  const przHi = dP * 1.015;
+  if (
+    !checkProjValid(
+      cs,
+      c.index + 1,
+      isBull,
+      x.price,
+      b.price,
+      c.price,
+      przLo,
+      przHi,
+      ext1618
+    )
+  ) {
+    return null;
+  }
+
+  const abB = Math.max(
+    3,
+    b.index - a.index
+  );
+  const tIdx = Math.max(
+    lastI + 1,
+    c.index + abB
+  );
+  const est =
+    lastD +
+    (tIdx - lastI) *
+      stepD *
+      86400000;
+  const dNode = {
+    index: tIdx,
+    date: est,
+    price: dP,
+    isHigh: !isBull
+  };
+  return {
+    name: nm,
+    isBull,
+    isComp: false,
+    nodes: [x, a, b, c, dNode],
+    przLo,
+    przHi,
+    dIdx: tIdx,
+    dDate: est
+  };
+}
+
+function detectHarmonics(
+  cs,
+  swings,
+  iv
+) {
+  const n = swings.length;
+  if (n < 4 || !cs.length) {
+    return null;
+  }
+  const lastI = cs.length - 1;
+  const lastD = cs[lastI].date;
+  const stepD = approxDays(iv);
+  const maxSh = Math.min(18, n - 4);
+  let fb = null;
+
+  for (
+    let sh = 0;
+    sh <= maxSh;
+    sh++
+  ) {
+    const endP = n - 1 - sh;
+    const isBack = sh > 0;
+    if (endP >= 4) {
+      const hit = evalXABCD(
+        swings[endP - 4],
+        swings[endP - 3],
+        swings[endP - 2],
+        swings[endP - 1],
+        swings[endP],
+        cs,
+        isBack
+      );
+      if (hit) {
+        if (hit[1]) return hit[0];
+        if (!fb) fb = hit[0];
+      }
+    }
+    if (sh === 0) {
+      const proj = projFromXABC(
+        swings[n - 4],
+        swings[n - 3],
+        swings[n - 2],
+        swings[n - 1],
+        cs,
+        lastI,
+        lastD,
+        stepD
+      );
+      if (proj) return proj;
+    }
+  }
+  return fb;
+}
+
+function calcMechStop(
+  cs,
+  mSwings,
+  isUp,
+  iv
+) {
+  const last = cs[cs.length - 1];
+  const intra = isIntraIv(iv);
+  const dUp = intra ? 0.985 : 0.96;
+  const dDn = intra ? 1.015 : 1.04;
+  const dLbl = intra
+    ? "日內1.5%窄幅硬性止損"
+    : "江恩4%標準保護止損";
+
+  let stUp = 0;
+  let stDn = 0;
+  for (
+    let i = cs.length - 1;
+    i > 0;
+    i--
+  ) {
+    const c = cs[i];
+    const p = cs[i - 1];
+    if (
+      c.high > p.high &&
+      c.low >= p.low &&
+      stDn === 0
+    ) {
+      stUp++;
+    } else if (
+      c.low < p.low &&
+      c.high <= p.high &&
+      stUp === 0
+    ) {
+      stDn++;
+    } else {
+      break;
+    }
+  }
+  const mid =
+    (last.high + last.low) / 2;
+  if (isUp) {
+    if (stUp >= 7) {
+      return [
+        last.low * 0.996,
+        "連續" +
+          stUp +
+          "期單邊(7期法則收緊止損)"
+      ];
+    }
+    const pH =
+      cs.length >= 2
+        ? cs[cs.length - 2].high
+        : last.high;
+    if (
+      last.high > pH &&
+      last.close < last.open &&
+      last.close < mid
+    ) {
+      return [
+        last.low * 0.996,
+        "出現三重信號頂部(破低即離場)"
+      ];
+    }
+    const loPt = [...mSwings]
+      .reverse()
+      .find(
+        s =>
+          !s.isHigh &&
+          s.price < last.close
+      );
+    if (loPt) {
+      return [
+        loPt.price * 0.995,
+        "機械擺動底(" +
+          fmtDate(loPt.date, intra) +
+          ")"
+      ];
+    }
+    return [last.close * dUp, dLbl];
+  } else {
+    if (stDn >= 7) {
+      return [
+        last.high * 1.004,
+        "連續" +
+          stDn +
+          "期單邊(7期法則收緊止損)"
+      ];
+    }
+    const pL =
+      cs.length >= 2
+        ? cs[cs.length - 2].low
+        : last.low;
+    if (
+      last.low < pL &&
+      last.close > last.open &&
+      last.close > mid
+    ) {
+      return [
+        last.high * 1.004,
+        "出現三重信號底部(升破即平倉)"
+      ];
+    }
+    const hiPt = [...mSwings]
+      .reverse()
+      .find(
+        s =>
+          s.isHigh &&
+          s.price > last.close
+      );
+    if (hiPt) {
+      return [
+        hiPt.price * 1.005,
+        "機械擺動頂(" +
+          fmtDate(hiPt.date, intra) +
+          ")"
+      ];
+    }
+    return [last.close * dDn, dLbl];
+  }
+}
+
+function calcOverbalance(
+  cs,
+  swings,
+  isUp,
+  iv,
+  tMode
+) {
+  if (swings.length < 4) {
+    return "波段數據累積中，平衡正常";
+  }
+  const last = cs[cs.length - 1];
+  const u = unitName(iv);
+  let maxDp = 0;
+  let maxDt = 0;
+  for (
+    let i = 1;
+    i < swings.length;
+    i++
+  ) {
+    const a = swings[i - 1];
+    const b = swings[i];
+    const dt = Math.abs(
+      barTimeDelta(
+        cs,
+        a.index,
+        b.index,
+        iv,
+        tMode
+      )
+    );
+    if (
+      isUp &&
+      a.isHigh &&
+      !b.isHigh
+    ) {
+      maxDp = Math.max(
+        maxDp,
+        a.price - b.price
+      );
+      maxDt = Math.max(maxDt, dt);
+    } else if (
+      !isUp &&
+      !a.isHigh &&
+      b.isHigh
+    ) {
+      maxDp = Math.max(
+        maxDp,
+        b.price - a.price
+      );
+      maxDt = Math.max(maxDt, dt);
+    }
+  }
+  const tail =
+    swings[swings.length - 1];
+  if (maxDp <= 0) {
+    return "時空平衡維持正常";
+  }
+  const curDt = Math.abs(
+    barTimeDelta(
+      cs,
+      tail.index,
+      last.id,
+      iv,
+      tMode
+    )
+  );
+  const curDp = isUp
+    ? Math.max(
+      0,
+      tail.price - last.low
+    )
+    : Math.max(
+      0,
+      last.high - tail.price
+    );
+  const pOv = curDp > maxDp;
+  const tOv =
+    curDt > maxDt &&
+    curDp > maxDp * 0.5;
+  if (pOv || tOv) {
+    return (
+      "⚠️已觸發平衡超越！當前回調" +
+      fmt(curDp) +
+      "(" +
+      curDt.toFixed(0) +
+      u +
+      ")已超前浪極值" +
+      fmt(maxDp) +
+      "(" +
+      maxDt.toFixed(0) +
+      u +
+      ")，防範反轉"
+    );
+  }
+  return (
+    "平衡正常（前浪最大回調" +
+    fmt(maxDp) +
+    "/" +
+    maxDt.toFixed(0) +
+    u +
+    "，當前" +
+    fmt(curDp) +
+    "/" +
+    curDt.toFixed(0) +
+    u +
+    "）"
+  );
+}
+
+function calcVolumeDiag(cs) {
+  const valid = cs.filter(
+    c => c.volume > 0
+  );
+  if (valid.length < 60) {
+    return "指數/無成交量數據，略過量能";
+  }
+  const rec50 = cs
+    .slice(-50)
+    .reduce(
+      (a, b) => a + b.volume,
+      0
+    );
+  const prev50 = cs
+    .slice(-100, -50)
+    .reduce(
+      (a, b) => a + b.volume,
+      0
+    );
+  const ySub = cs.slice(-250);
+  let maxV = 1;
+  for (const c of ySub) {
+    if (c.volume > maxV) {
+      maxV = c.volume;
+    }
+  }
+  const curV =
+    cs[cs.length - 1].volume;
+  const shrink = curV / maxV;
+  const tags = [];
+  if (prev50 > 0) {
+    const r = rec50 / prev50;
+    if (r >= 2.0) {
+      tags.push(
+        "50期吸籌動量比 " +
+          r.toFixed(2) +
+          "x(>2.0主力放量)"
+      );
+    } else {
+      tags.push(
+        "50期量能動量比 " +
+          r.toFixed(2) +
+          "x"
+      );
+    }
+  }
+  if (shrink > 0 && shrink <= 0.25) {
+    tags.push(
+      "當前量僅區間峰值" +
+        Math.round(shrink * 100) +
+        "%（地量見地價特徵）"
+    );
+  }
+  return tags.join("；");
+}
+
+function calcDailyGuide(
+  dCs,
+  iv,
+  isUpFan
+) {
+  if (!isIntraIv(iv)) return "";
+  if (dCs.length < 20) {
+    return "日線定方向：載入日線結構中";
+  }
+  const dSw = detectSwings(
+    dCs,
+    "1d"
+  );
+  const dAnc = pickAnchor(
+    dCs,
+    dSw,
+    null,
+    "auto"
+  );
+  const dUp = !dAnc.isHigh;
+  const dVol = calcVol(
+    dCs,
+    dAnc,
+    dSw,
+    "1d",
+    "trading"
+  );
+  const lastD = dCs[dCs.length - 1];
+  const dt = lastD.id - dAnc.index;
+  const s = dUp ? 1 : -1;
+  const p1 = Math.max(
+    0,
+    dAnc.price + s * dVol * dt
+  );
+  const above = lastD.close >= p1;
+  const dTxt = above
+    ? "日線多頭強勢(1x1上方)"
+    : "日線空頭弱勢(1x1下方)";
+  const align =
+    above === isUpFan
+      ? "順應日線主趨勢"
+      : "⚠️逆日線主方向(僅作短線反抽)";
+  return dTxt + "｜" + align;
+}
+
+function runAnalysis() {
+  const cs = st.candles;
+  if (cs.length < 20) return;
+  const iv = st.interval;
+  const intra = isIntraIv(iv);
+  const effMode = intra
+    ? "trading" : st.timeMode;
+
+  const swings = detectSwings(cs, iv);
+  const mSwings = buildMechSwings(
+    cs,
+    2
+  );
+  const anc = pickAnchor(
+    cs,
+    swings,
+    st.customAnc,
+    st.dir
+  );
+  const isUp =
+    st.dir === "up"
+      ? true
+      : (st.dir === "down"
+        ? false : !anc.isHigh);
+  const bVol = calcVol(
+    cs,
+    anc,
+    swings,
+    iv,
+    effMode
+  );
+  const vol = Math.max(
+    0.0001,
+    bVol * st.volMult
+  );
+  const lastI = cs.length - 1;
+  const endIdx =
+    lastI + st.horizon;
+  const rays = buildRays(
+    cs,
+    anc,
+    isUp,
+    vol,
+    endIdx,
+    iv,
+    effMode
+  );
+  const hits = calcTimeHits(
+    cs,
+    anc,
+    swings,
+    vol,
+    st.horizon,
+    iv,
+    effMode
+  );
+  const { fibs, pcts, gm } =
+    calcFibsAndGrid(cs);
+  const harm = detectHarmonics(
+    cs,
+    swings,
+    iv
+  );
+  const stopInfo = calcMechStop(
+    cs,
+    mSwings,
+    isUp,
+    iv
+  );
+  const obMsg = calcOverbalance(
+    cs,
+    swings,
+    isUp,
+    iv,
+    effMode
+  );
+  const volMsg = calcVolumeDiag(cs);
+  const dailyHint = calcDailyGuide(
+    st.dailyCandles,
+    iv,
+    isUp
+  );
+
+  const last = cs[lastI];
+  const dtNow = barTimeDelta(
+    cs,
+    anc.index,
+    last.id,
+    iv,
+    effMode
+  );
+  const sign = isUp ? 1 : -1;
+  const p1x1 = Math.max(
+    0,
+    anc.price + sign * vol * dtNow
+  );
+  const posH =
+    last.close >= p1x1
+      ? "位於 1x1(45度) 強勢線上方"
+      : "處於 1x1(45度) 弱勢線下方";
+  const dirTxt = isUp
+    ? "上升" : "下跌";
+  const modeNm =
+    st.dir === "up"
+      ? "向上"
+      : (st.dir === "down"
+        ? "向下" : "自動");
+  const tTag = intra
+    ? "交易K線連續"
+    : (effMode === "calendar"
+      ? "自然日" : "交易日");
+  const uNm =
+    effMode === "calendar" &&
+    iv === "1d"
+      ? "自然日" : unitName(iv);
+  const titleF = st.name
+    ? st.code + " " + st.name
+    : st.code;
+
+  const rep = [];
+  rep.push("【江恩時空推演報告】");
+  rep.push("標的：" + titleF);
+  rep.push(
+    "維度：" +
+      ivTitle(iv) +
+      "(" +
+      tTag +
+      ") | 現價：" +
+      fmt(last.close)
+  );
+  if (dailyHint) {
+    rep.push(
+      "多週期過濾：" + dailyHint
+    );
+  }
+  rep.push(
+    "起點：" +
+      fmtDate(anc.date, intra) +
+      " (" +
+      fmt(anc.price) +
+      ")"
+  );
+  rep.push(
+    "角度方向：" +
+      dirTxt +
+      "江恩線(" +
+      modeNm +
+      ")"
+  );
+  rep.push(
+    "獨立波動率：" +
+      fmt(vol) +
+      "/" +
+      uNm
+  );
+  rep.push(
+    "1x1主線現值：" + fmt(p1x1)
+  );
+  rep.push("強弱診斷：" + posH);
+  rep.push("平衡超越：" + obMsg);
+  rep.push("量能結構：" + volMsg);
+  rep.push("");
+  rep.push(
+    intra
+      ? "【日內圓周與短線轉勢窗口】"
+      : "【大級別圓周與轉勢窗口】"
+  );
+
+  const majHits = hits.filter(
+    h => h.isMajor
+  );
+  const showH = majHits.length
+    ? majHits.slice(0, 3)
+    : hits.slice(0, 3);
+  if (showH.length === 0) {
+    rep.push(
+      "延伸期內暫無重大轉勢共振"
+    );
+  } else {
+    for (const h of showH) {
+      const dtFut = barTimeDelta(
+        cs,
+        anc.index,
+        h.targetIndex,
+        iv,
+        effMode
+      );
+      const t1 = Math.max(
+        0,
+        anc.price +
+          sign * vol * dtFut
+      );
+      const t2 = Math.max(
+        0,
+        anc.price +
+          sign * vol * 2 * dtFut
+      );
+      const t3 = Math.max(
+        0,
+        anc.price +
+          sign * vol * 0.5 * dtFut
+      );
+      const tag = h.isMajor
+        ? "★核心轉折" : "轉勢窗";
+      rep.push(
+        tag +
+          "：" +
+          fmtDate(h.estDate, intra)
+      );
+      rep.push(
+        "共振因數：" +
+          h.reasons.join("+")
+      );
+      rep.push(
+        "屆時1x1目標價：" + fmt(t1)
+      );
+      rep.push(
+        "強弱區間：" +
+          fmt(t3) +
+          " ~ " +
+          fmt(t2)
+      );
+    }
+  }
+
+  rep.push("");
+  rep.push(
+    "【江恩八分位與幾何中項】"
+  );
+  for (const p of pcts) {
+    if (p.isMajor) {
+      rep.push(
+        p.label +
+          "：" +
+          fmt(p.price)
+      );
+    }
+  }
+  rep.push(
+    "幾何和諧中項√(H×L)：" +
+      fmt(gm)
+  );
+
+  rep.push("");
+  rep.push("【黃金比率匯聚位】");
+  for (const f of fibs.slice(0, 4)) {
+    rep.push(
+      f.label +
+        "：" +
+        fmt(f.price)
+    );
+  }
+
+  rep.push("");
+  rep.push("【和諧形態掃描】");
+  if (harm) {
+    const stTxt = harm.isComp
+      ? "已成型反轉" : "推演完成中";
+    rep.push(
+      "形態：" +
+        harm.name +
+        "(" +
+        stTxt +
+        ")"
+    );
+    rep.push(
+      "D點轉勢窗口：" +
+        fmtDate(harm.dDate, intra)
+    );
+    rep.push(
+      "目標反轉區：" +
+        fmt(harm.przLo) +
+        " ~ " +
+        fmt(harm.przHi)
+    );
+  } else {
+    rep.push(
+      "當前處於單邊趨勢延伸中，" +
+        "暫無有效" +
+        ivTitle(iv) +
+        "和諧形態"
+    );
+  }
+
+  rep.push("");
+  rep.push("【江恩機械擺動風控】");
+  rep.push(
+    "動態機械止損：" +
+      fmt(stopInfo[0])
+  );
+  rep.push(
+    "止損依據：" + stopInfo[1]
+  );
+  rep.push(
+    intra
+      ? "短線鐵則：嚴禁過度交易，" +
+        "單筆風險控管於2%~5%內"
+      : "資金控管：單筆不超總資金10%"
+  );
+
+  st.res = {
+    anc,
+    isUp,
+    vol,
+    effMode,
+    rays,
+    hits,
+    fibs,
+    pcts,
+    harm,
+    mSwings,
+    stopInfo,
+    report: rep.join("\n")
+  };
+
+  document.getElementById(
+    "turnCardTitle"
+  ).textContent = intra
+    ? "日內圓周與短線轉勢窗口"
+    : "大級別圓周與轉勢窗口";
+  const dBadge =
+    document.getElementById(
+      "dailyHintBadge"
+    );
+  if (dailyHint) {
+    dBadge.textContent = dailyHint;
+    dBadge.style.display = "block";
+  } else {
+    dBadge.style.display = "none";
+  }
+
+  const topHit = showH[0];
+  const badge =
+    document.getElementById(
+      "turnBadge"
+    );
+  if (topHit) {
+    badge.style.display =
+      topHit.isMajor
+        ? "block" : "none";
+    document.getElementById(
+      "turnDate"
+    ).textContent =
+      "預計時間：" +
+      fmtDate(topHit.estDate, intra);
+    document.getElementById(
+      "turnWhy"
+    ).textContent =
+      "共振原因：" +
+      topHit.reasons.join(" + ");
+    const dtFut = barTimeDelta(
+      cs,
+      anc.index,
+      topHit.targetIndex,
+      iv,
+      effMode
+    );
+    const p1 = Math.max(
+      0,
+      anc.price + sign * vol * dtFut
+    );
+    document.getElementById(
+      "turnPrice"
+    ).textContent =
+      "屆時 1x1 目標價：" + fmt(p1);
+  } else {
+    badge.style.display = "none";
+    document.getElementById(
+      "turnDate"
+    ).textContent = "暫無強共振";
+    document.getElementById(
+      "turnWhy"
+    ).textContent = "--";
+    document.getElementById(
+      "turnPrice"
+    ).textContent = "--";
+  }
+
+  const hBadge =
+    document.getElementById(
+      "harmBadge"
+    );
+  if (harm) {
+    hBadge.style.display =
+      harm.name.includes("回溯")
+        ? "block" : "none";
+    document.getElementById(
+      "harmName"
+    ).textContent =
+      "形態：" + harm.name;
+    document.getElementById(
+      "harmDate"
+    ).textContent =
+      "D點時間窗口：" +
+      fmtDate(harm.dDate, intra);
+    document.getElementById(
+      "harmPrz"
+    ).textContent =
+      "反轉目標區：" +
+      fmt(harm.przLo) +
+      " ~ " +
+      fmt(harm.przHi);
+  } else {
+    hBadge.style.display = "none";
+    const tip =
+      iv === "1d"
+        ? "（建議切換週線或小時圖檢視）"
+        : "（建議切換其他週期檢視結構）";
+    document.getElementById(
+      "harmName"
+    ).textContent =
+      "當前處於單邊趨勢延伸中，" +
+      "暫無有效" +
+      ivTitle(iv) +
+      "和諧形態" +
+      tip;
+    document.getElementById(
+      "harmDate"
+    ).textContent = "--";
+    document.getElementById(
+      "harmPrz"
+    ).textContent = "--";
+  }
+
+  document.getElementById(
+    "repTitle"
+  ).textContent =
+    titleF + " 江恩策略建議";
+  document.getElementById(
+    "repBody"
+  ).textContent = st.res.report;
+
+  drawChart();
+}
+
+function getVisRange() {
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  const endB = Math.max(
+    Math.min(maxE, winL),
+    maxE - st.panOff
+  );
+  const startB = Math.max(
+    0,
+    endB - winL
+  );
+  const endH = Math.min(endB, lastH);
+  return { startB, endH, endB };
+}
+
+function maxPanLimit() {
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  return Math.max(0, maxE - winL);
+}
+
+function panBackward(step) {
+  const lim = maxPanLimit();
+  st.panOff = Math.min(
+    lim,
+    st.panOff + step
+  );
+}
+
+function panForward(step) {
+  st.panOff = Math.max(
+    0,
+    st.panOff - step
+  );
+}
+
+function focusHarmonic() {
+  if (!st.res || !st.res.harm) {
+    return;
+  }
+  const h = st.res.harm;
+  const xIdx = h.nodes[0].index;
+  const dIdx = h.dIdx;
+  const span = Math.max(
+    10,
+    dIdx - xIdx
+  );
+  if (span + 24 > st.histBars) {
+    st.histBars = Math.min(
+      360,
+      span + 30
+    );
+  }
+  const mid = Math.floor(
+    (xIdx + dIdx) / 2
+  );
+  const lastH = Math.max(
+    0,
+    st.candles.length - 1
+  );
+  const maxE = lastH + st.horizon;
+  const winL =
+    st.histBars + st.horizon;
+  const desEnd =
+    mid + Math.floor(winL / 2);
+  const rawPan = maxE - desEnd;
+  const lim = maxPanLimit();
+  st.panOff = Math.max(
+    0,
+    Math.min(lim, rawPan)
+  );
+  if (dIdx >= 0 && dIdx <= maxE) {
+    st.selBar = dIdx;
+  }
+  drawChart();
+}
+
+function stepBar(delta) {
+  if (!st.candles.length) return;
+  const lastH =
+    st.candles.length - 1;
+  const maxE = lastH + st.horizon;
+  const cur =
+    st.selBar != null
+      ? st.selBar : lastH;
+  const nxt = Math.max(
+    0,
+    Math.min(maxE, cur + delta)
+  );
+  st.selBar = nxt;
+  const { startB, endB } =
+    getVisRange();
+  const maxP = maxPanLimit();
+  if (nxt < startB) {
+    st.panOff = Math.min(
+      maxP,
+      st.panOff + (startB - nxt)
+    );
+  } else if (nxt > endB) {
+    st.panOff = Math.max(
+      0,
+      st.panOff - (nxt - endB)
+    );
+  }
+  drawChart();
+}
+
+function priceAtBar(bar) {
+  const cs = st.candles;
+  if (!cs.length) return 0;
+  if (bar >= 0 && bar < cs.length) {
+    return cs[bar].close;
+  }
+  if (st.res) {
+    const r = st.res;
+    const dt = barTimeDelta(
+      cs,
+      r.anc.index,
+      bar,
+      st.interval,
+      r.effMode
+    );
+    const s = r.isUp ? 1 : -1;
+    return Math.max(
+      0,
+      r.anc.price + s * r.vol * dt
+    );
+  }
+  return cs[cs.length - 1].close;
+}
+
+function drawChart() {
+  const cv =
+    document.getElementById("cv");
+  const rect =
+    cv.getBoundingClientRect();
+  if (
+    rect.width < 10 ||
+    rect.height < 10
+  ) {
+    return;
+  }
+  const dpr =
+    window.devicePixelRatio || 1;
+  cv.width = rect.width * dpr;
+  cv.height = rect.height * dpr;
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const W = rect.width;
+  const H = rect.height;
+  const rW = 58;
+  const bH = 30;
+  const pW = Math.max(1, W - rW);
+  const pH = Math.max(1, H - bH);
+  ctx.clearRect(0, 0, W, H);
+
+  const cs = st.candles;
+  if (!cs.length) return;
+  const intra = isIntraIv(
+    st.interval
+  );
+
+  const {
+    startB,
+    endH,
+    endB
+  } = getVisRange();
+  const lastH = cs.length - 1;
+  const rawSel =
+    st.selBar != null
+      ? st.selBar : lastH;
+  const actB = Math.max(
+    startB,
+    Math.min(endB, rawSel)
+  );
+
+  const bLoc =
+    document.getElementById(
+      "btnLocHarm"
+    );
+  if (
+    st.showHarm &&
+    st.res &&
+    st.res.harm
+  ) {
+    const h = st.res.harm;
+    const xI = h.nodes[0].index;
+    const dI = h.dIdx;
+    const outV =
+      xI < startB || dI > endB;
+    const isBk =
+      h.name.includes("回溯");
+    bLoc.style.display =
+      outV || isBk
+        ? "inline-block" : "none";
+  } else {
+    bLoc.style.display = "none";
+  }
+
+  document.getElementById(
+    "btnHistBack"
+  ).style.display =
+    startB > 0
+      ? "inline-block" : "none";
+  document.getElementById(
+    "btnHistFwd"
+  ).style.display =
+    st.panOff > 0
+      ? "inline-block" : "none";
+  document.getElementById(
+    "btnLatest"
+  ).style.display =
+    st.panOff > 0
+      ? "inline-block" : "none";
+  document.getElementById(
+    "btnSetAnc"
+  ).style.display =
+    st.selBar != null &&
+    st.selBar < cs.length
+      ? "inline-block" : "none";
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (
+    let i = startB;
+    i <= endH;
+    i++
+  ) {
+    if (cs[i].low < lo) {
+      lo = cs[i].low;
+    }
+    if (cs[i].high > hi) {
+      hi = cs[i].high;
+    }
+  }
+  if (
+    st.panOff === 0 &&
+    st.res
+  ) {
+    const r1 = st.res.rays.find(
+      x => x.isPrimary
+    );
+    const lp =
+      r1?.points[
+        r1.points.length - 1
+      ];
+    if (
+      lp &&
+      lp.price > 0 &&
+      lp.price < hi * 2.2
+    ) {
+      hi = Math.max(hi, lp.price);
+      lo = Math.min(lo, lp.price);
+    }
+  }
+  if (
+    st.showHarm &&
+    st.res &&
+    st.res.harm
+  ) {
+    const h = st.res.harm;
+    if (
+      h.dIdx >= startB &&
+      h.nodes[0].index <= endB
+    ) {
+      for (const nd of h.nodes) {
+        lo = Math.min(lo, nd.price);
+        hi = Math.max(hi, nd.price);
+      }
+      lo = Math.min(lo, h.przLo);
+      hi = Math.max(hi, h.przHi);
+    }
+  }
+  if (hi <= lo) hi = lo + 1;
+  const pad = (hi - lo) * 0.08;
+  const minP = Math.max(0, lo - pad);
+  const maxP = hi + pad;
+
+  const xOf = b => {
+    const sp = Math.max(
+      1,
+      endB - startB
+    );
+    return (
+      ((b - startB) / sp) *
+        (pW - 12) +
+      6
+    );
+  };
+  const yOf = p => {
+    const sp = Math.max(
+      0.0001,
+      maxP - minP
+    );
+    return (
+      pH -
+      ((p - minP) / sp) *
+        (pH - 16) -
+      8
+    );
+  };
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 0.7;
+  for (let i = 0; i <= 4; i++) {
+    const y =
+      pH -
+      (i / 4) * (pH - 16) -
+      8;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(pW, y);
+    ctx.stroke();
+  }
+  const spanB = Math.max(
+    1,
+    endB - startB
+  );
+  for (let i = 1; i <= 3; i++) {
+    const bar =
+      startB +
+      Math.floor((spanB * i) / 4);
+    const x = xOf(bar);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, pH);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.22)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, pH);
+  ctx.lineTo(pW, pH);
+  ctx.moveTo(pW, 0);
+  ctx.lineTo(pW, pH);
+  ctx.stroke();
+
+  if (
+    lastH >= startB &&
+    lastH <= endB
+  ) {
+    const xNow = xOf(lastH);
+    ctx.fillStyle =
+      "rgba(59,130,246,0.08)";
+    ctx.fillRect(
+      xNow,
+      0,
+      Math.max(0, pW - xNow),
+      pH
+    );
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle =
+      "rgba(255,255,255,0.35)";
+    ctx.beginPath();
+    ctx.moveTo(xNow, 0);
+    ctx.lineTo(xNow, pH);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const r = st.res;
+  if (r) {
+    if (st.showGrid) {
+      for (const lv of r.pcts) {
+        if (
+          lv.price < minP ||
+          lv.price > maxP
+        ) {
+          continue;
+        }
+        const y = yOf(lv.price);
+        const is50 =
+          Math.abs(lv.ratio - 0.5) <
+          0.01;
+        ctx.save();
+        ctx.setLineDash(
+          is50 ? [6, 3] : [2, 4]
+        );
+        ctx.strokeStyle = is50
+          ? "rgba(250,204,21,0.55)"
+          : (lv.isMajor
+            ? "rgba(99,102,241,0.48)"
+            : "rgba(99,102,241,0.22)");
+        ctx.lineWidth =
+          is50 ? 1.4 : 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(pW, y);
+        ctx.stroke();
+        ctx.restore();
+        if (lv.isMajor) {
+          ctx.fillStyle = is50
+            ? "#facc15" : "#818cf8";
+          ctx.font =
+            "9px sans-serif";
+          ctx.fillText(
+            lv.label,
+            6,
+            y - 3
+          );
+        }
+      }
+    }
+
+    if (st.showFib) {
+      for (const f of r.fibs) {
+        if (
+          f.price < minP ||
+          f.price > maxP
+        ) {
+          continue;
+        }
+        const y = yOf(f.price);
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle =
+          "rgba(168,85,247,0.45)";
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(pW, y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    for (const h of r.hits) {
+      if (
+        h.targetIndex < startB ||
+        h.targetIndex > endB
+      ) {
+        continue;
+      }
+      const x = xOf(h.targetIndex);
+      ctx.save();
+      if (!h.isMajor) {
+        ctx.setLineDash([5, 3]);
+      }
+      ctx.strokeStyle = h.isMajor
+        ? "#f472b6"
+        : (h.strength >= 2
+          ? "#fb923c"
+          : "rgba(250,204,21,0.45)");
+      ctx.lineWidth =
+        h.isMajor ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, 14);
+      ctx.lineTo(x, pH);
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = h.isMajor
+        ? "#f472b6" : "#fb923c";
+      ctx.font = "9px sans-serif";
+      ctx.fillText(
+        h.isMajor
+          ? (intra
+            ? "◎共振" : "◎大周期")
+          : "★轉",
+        x - 10,
+        10
+      );
+    }
+
+    if (st.showHarm && r.harm) {
+      const h = r.harm;
+      const pts = h.nodes.map(n => ({
+        x: xOf(n.index),
+        y: yOf(n.price)
+      }));
+      ctx.fillStyle = h.isBull
+        ? "rgba(52,211,153,0.16)"
+        : "rgba(244,114,182,0.16)";
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.lineTo(pts[1].x, pts[1].y);
+      ctx.lineTo(pts[2].x, pts[2].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(pts[2].x, pts[2].y);
+      ctx.lineTo(pts[3].x, pts[3].y);
+      ctx.lineTo(pts[4].x, pts[4].y);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.save();
+      if (!h.isComp) {
+        ctx.setLineDash([4, 3]);
+      }
+      ctx.strokeStyle = h.isBull
+        ? "#34d399" : "#f472b6";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      pts.forEach((p, idx) => {
+        if (idx === 0) {
+          ctx.moveTo(p.x, p.y);
+        } else {
+          ctx.lineTo(p.x, p.y);
+        }
+      });
+      ctx.stroke();
+      ctx.restore();
+
+      const lbls = [
+        "X", "A", "B", "C", "D"
+      ];
+      h.nodes.forEach((nd, i) => {
+        if (
+          nd.index < startB ||
+          nd.index > endB
+        ) {
+          return;
+        }
+        ctx.fillStyle = h.isBull
+          ? "#34d399" : "#f472b6";
+        ctx.font =
+          "bold 10px sans-serif";
+        ctx.fillText(
+          lbls[i],
+          pts[i].x - 3,
+          pts[i].y - 6
+        );
+      });
+    }
+
+    if (
+      st.showSwing &&
+      r.mSwings.length >= 2
+    ) {
+      ctx.save();
+      ctx.strokeStyle =
+        "rgba(250,204,21,0.85)";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      r.mSwings.forEach((s, i) => {
+        const sx = xOf(s.index);
+        const sy = yOf(s.price);
+        if (i === 0) {
+          ctx.moveTo(sx, sy);
+        } else {
+          ctx.lineTo(sx, sy);
+        }
+      });
+      ctx.stroke();
+      for (const s of r.mSwings) {
+        if (
+          s.index < startB ||
+          s.index > endB
+        ) {
+          continue;
+        }
+        ctx.fillStyle = s.isHigh
+          ? "#fb923c" : "#34d399";
+        ctx.beginPath();
+        ctx.arc(
+          xOf(s.index),
+          yOf(s.price),
+          3,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    for (const ray of r.rays) {
+      if (ray.points.length < 2) {
+        continue;
+      }
+      ctx.strokeStyle = ray.isPrimary
+        ? "#facc15"
+        : (ray.name === "2x1" ||
+          ray.name === "1x2"
+          ? "rgba(56,189,248,0.7)"
+          : "rgba(45,212,191,0.32)");
+      ctx.lineWidth =
+        ray.isPrimary ? 2 : 1;
+      ctx.beginPath();
+      ray.points.forEach((pt, idx) => {
+        const x = xOf(pt.barIndex);
+        const y = yOf(pt.price);
+        if (idx === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+      const lp =
+        ray.points[
+          ray.points.length - 1
+        ];
+      if (
+        lp.barIndex >= startB &&
+        lp.barIndex <= endB &&
+        lp.price >= minP &&
+        lp.price <= maxP
+      ) {
+        ctx.fillStyle =
+          ctx.strokeStyle;
+        ctx.font = "9px sans-serif";
+        ctx.fillText(
+          ray.name,
+          pW - 24,
+          yOf(lp.price)
+        );
+      }
+    }
+  }
+
+  const tot = Math.max(
+    1,
+    endB - startB
+  );
+  const bW = Math.max(
+    2,
+    Math.min(10, (pW / tot) * 0.65)
+  );
+  if (st.style === "line") {
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    for (
+      let i = startB;
+      i <= endH;
+      i++
+    ) {
+      const x = xOf(i);
+      const y = yOf(cs[i].close);
+      if (i === startB) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+  } else {
+    for (
+      let i = startB;
+      i <= endH;
+      i++
+    ) {
+      const c = cs[i];
+      const x = xOf(i);
+      const up = c.close >= c.open;
+      ctx.strokeStyle = up
+        ? "#22c55e" : "#ef4444";
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, yOf(c.high));
+      ctx.lineTo(x, yOf(c.low));
+      ctx.stroke();
+      const yO = yOf(c.open);
+      const yC = yOf(c.close);
+      ctx.fillRect(
+        x - bW / 2,
+        Math.min(yO, yC),
+        bW,
+        Math.max(1.5, Math.abs(yC - yO))
+      );
+    }
+  }
+
+  if (
+    r &&
+    r.anc.index >= startB &&
+    r.anc.index <= endB
+  ) {
+    const ax = xOf(r.anc.index);
+    const ay = yOf(r.anc.price);
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.arc(
+      ax,
+      ay,
+      5,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.font = "10px sans-serif";
+    ctx.fillText(
+      "起點",
+      ax - 10,
+      ay + 15
+    );
+  }
+
+  const isFut = actB >= cs.length;
+  const lineCol = isFut
+    ? "#f97316" : "#38bdf8";
+  const cx = xOf(actB);
+  const actP = priceAtBar(actB);
+
+  ctx.strokeStyle = lineCol;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(cx, 0);
+  ctx.lineTo(cx, pH);
+  ctx.stroke();
+
+  if (actP >= minP && actP <= maxP) {
+    const cy = yOf(actP);
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle =
+      "rgba(56,189,248,0.55)";
+    ctx.beginPath();
+    ctx.moveTo(0, cy);
+    ctx.lineTo(pW, cy);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = lineCol;
+    ctx.beginPath();
+    ctx.arc(
+      cx,
+      cy,
+      4,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    const pLbl = fmtAxis(actP);
+    const tagY = Math.max(
+      10,
+      Math.min(pH - 10, cy)
+    );
+    ctx.fillStyle = lineCol;
+    ctx.fillRect(
+      pW + 2,
+      tagY - 9,
+      rW - 4,
+      18
+    );
+    ctx.fillStyle = "#000";
+    ctx.font =
+      "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      pLbl,
+      pW + rW / 2,
+      tagY + 3.5
+    );
+  }
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 4; i++) {
+    const ratio = i / 4;
+    const p =
+      minP + (maxP - minP) * ratio;
+    const y =
+      pH -
+      ratio * (pH - 16) -
+      8;
+    ctx.fillText(
+      fmtAxis(p),
+      pW + rW / 2,
+      y + 3
+    );
+  }
+
+  for (let i = 0; i <= 4; i++) {
+    const bar =
+      startB +
+      Math.floor((spanB * i) / 4);
+    const x = xOf(bar);
+    if (x < 24 || x > pW - 24) {
+      continue;
+    }
+    const fullD = fmtDate(
+      dateMsForIndex(
+        cs,
+        bar,
+        st.interval
+      ),
+      intra
+    );
+    const shortD = intra
+      ? fullD
+      : (st.interval === "1mo"
+        ? fullD.slice(0, 7)
+        : fullD.slice(5));
+    ctx.fillText(
+      shortD,
+      x,
+      pH + 18
+    );
+  }
+
+  const dFull = fmtDate(
+    dateMsForIndex(
+      cs,
+      actB,
+      st.interval
+    ),
+    intra
+  );
+  const pillW = intra ? 132 : 116;
+  const pillH = 22;
+  const btnW = 22;
+  const pillX = Math.max(
+    pillW / 2 + 2,
+    Math.min(
+      pW - pillW / 2 - 2,
+      cx
+    )
+  );
+  const boxL = pillX - pillW / 2;
+  const boxT = pH + 4;
+  st.pillBox = {
+    x: boxL,
+    y: boxT,
+    w: pillW,
+    h: pillH,
+    btnW
+  };
+
+  ctx.fillStyle = lineCol;
+  ctx.fillRect(
+    boxL,
+    boxT,
+    pillW,
+    pillH
+  );
+  ctx.fillStyle = "#000";
+  ctx.font =
+    "bold 10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(
+    "<",
+    boxL + btnW / 2,
+    boxT + 14.5
+  );
+  ctx.fillText(
+    dFull,
+    pillX,
+    boxT + 14.5
+  );
+  ctx.fillText(
+    ">",
+    boxL + pillW - btnW / 2,
+    boxT + 14.5
+  );
+  ctx.textAlign = "left";
+
+  let pTxt = "";
+  if (actB < cs.length) {
+    pTxt =
+      "收 " +
+      fmt(cs[actB].close);
+  } else {
+    pTxt =
+      "未來+" +
+      (actB - lastH) +
+      unitName(st.interval);
+  }
+  const gTxt = r
+    ? " | 1x1:" + fmt(actP)
+    : "";
+  const head = st.name
+    ? st.name + " "
+    : st.code + " ";
+  document.getElementById(
+    "hudTxt"
+  ).textContent =
+    head + dFull + " " + pTxt + gTxt;
+}
+
 function playWebAlarm() {
   try {
     const Ctx =
@@ -1201,6 +4746,12 @@ function openAlertModal() {
         (r.harm.przLo + r.harm.przHi) /
         2;
       addFillBtn("和諧D點", hd);
+    }
+    if (r.stopInfo) {
+      addFillBtn(
+        "擺動止損",
+        r.stopInfo[0]
+      );
     }
   }
   renderAlertList();
