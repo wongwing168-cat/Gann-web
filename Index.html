@@ -311,6 +311,37 @@ canvas {
   color: #e2e8f0;
   white-space: pre-wrap;
 }
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 12px;
+}
+.modal-box {
+  background: #141821;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.al-row {
+  background: #1e2533;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 </style>
 </head>
 <body>
@@ -338,6 +369,9 @@ canvas {
       title="從自選移除目前標的">
       刪
     </button>
+    <button
+      class="btn btn-y"
+      id="btnAlerts">🔔 到價</button>
     <div class="ac-wrap">
       <input
         id="codeInp"
@@ -562,6 +596,162 @@ canvas {
           id="repBody">載入中...</div>
       </div>
     </div>
+  </div>
+</div>
+
+<div
+  class="modal-bg"
+  id="alertModal">
+  <div class="modal-box">
+    <div class="c-hd c-org">
+      <span>🔔 江恩到價作戰計劃與響鬧</span>
+      <div style="display:flex;gap:5px">
+        <button
+          class="btn btn-y"
+          id="btnTestRing">測鈴聲</button>
+        <button
+          class="btn"
+          id="btnCloseAlert">關閉</button>
+      </div>
+    </div>
+
+    <div
+      style="background:#1e2533;
+      padding:8px;border-radius:8px;
+      display:flex;flex-direction:column;
+      gap:6px">
+      <div
+        class="lbl"
+        style="color:#38bdf8">
+        iPhone 鎖屏背景響鬧（填入免費 Bark App Key）：
+      </div>
+      <div style="display:flex;gap:6px">
+        <input
+          id="barkKeyInp"
+          style="flex:1;
+          text-transform:none"
+          placeholder="貼上 iPhone Bark Key">
+        <button
+          class="btn on"
+          id="btnSaveBark">儲存Key</button>
+      </div>
+    </div>
+
+    <div
+      style="background:#1e2533;
+      padding:10px;border-radius:8px;
+      display:flex;flex-direction:column;
+      gap:7px">
+      <div
+        style="display:flex;
+        justify-content:space-between;
+        font-size:13px">
+        <span
+          id="alCurSym"
+          style="color:#facc15;
+          font-weight:700">--</span>
+        <span
+          id="alCurP"
+          style="color:#38bdf8">--</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <select
+          id="alCondSel"
+          style="width:110px">
+          <option value="向下跌破">
+            向下跌破
+          </option>
+          <option value="向上突破">
+            向上突破
+          </option>
+        </select>
+        <input
+          id="alTargetInp"
+          type="number"
+          step="0.01"
+          style="flex:1;
+          text-transform:none"
+          placeholder="目標價位">
+      </div>
+      <div
+        id="alQuickFill"
+        style="display:flex;
+        flex-wrap:wrap;gap:5px">
+      </div>
+      <input
+        id="alNoteInp"
+        style="width:100%;
+        text-transform:none"
+        placeholder="預寫交易方案（例：守穩分批建倉20%，止損設於...）">
+      <button
+        class="btn btn-hi"
+        id="btnAddAlert">
+        新增並同步雲端監控
+      </button>
+    </div>
+
+    <div
+      style="display:flex;
+      justify-content:space-between;
+      font-size:12px">
+      <span
+        id="alListCnt"
+        style="font-weight:700">
+        監控清單 (0)
+      </span>
+      <span
+        id="alScanInfo"
+        style="color:#34d399">
+        雲端每2分鐘自動巡檢
+      </span>
+    </div>
+    <div
+      id="alListBox"
+      style="display:flex;
+      flex-direction:column;gap:6px">
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal-bg"
+  id="trigModal">
+  <div
+    class="modal-box"
+    style="border:2px solid #f97316;
+    text-align:center">
+    <div
+      class="c-big"
+      style="color:#facc15;
+      font-size:18px">
+      🔔 江恩到價作戰警報觸發！
+    </div>
+    <div
+      id="trigSym"
+      class="c-big">--</div>
+    <div
+      id="trigDetail"
+      class="c-val">--</div>
+    <div
+      style="background:#1e2533;
+      padding:10px;border-radius:8px;
+      text-align:left">
+      <div
+        class="lbl"
+        style="color:#fb923c">
+        預寫交易作戰方案：
+      </div>
+      <div
+        id="trigPlan"
+        style="font-size:14px;
+        font-weight:600;
+        margin-top:4px">--</div>
+    </div>
+    <button
+      class="btn btn-hi"
+      id="btnAckTrig">
+      停止響鬧並執行計劃
+    </button>
   </div>
 </div>
 
@@ -808,6 +998,8 @@ for (const c of CATALOG) {
 
 const PREF_KEY = "gann_web_prefs_v2";
 const SAVED_KEY = "gann_web_saved_v1";
+const ALERT_KEY = "gann_web_alerts_v1";
+const BARK_KEY = "gann_web_bark_v1";
 
 const st = {
   market: "hk",
@@ -834,3632 +1026,321 @@ const st = {
   reqId: 0,
   pillBox: null,
   acTimer: null,
-  saved: []
+  saved: [],
+  alerts: [],
+  barkKey: "",
+  ringTimer: null
 };
 
-function isIntraday(iv) {
-  return iv === "15m" ||
-    iv === "30m" ||
-    iv === "60m";
-}
-
-function intvMeta(iv) {
-  if (iv === "15m") {
-    return {
-      t: "15分",
-      days: 0.036,
-      mins: 15,
-      u: "期(15m)"
-    };
-  }
-  if (iv === "30m") {
-    return {
-      t: "30分",
-      days: 0.072,
-      mins: 30,
-      u: "期(30m)"
-    };
-  }
-  if (iv === "60m") {
-    return {
-      t: "1時",
-      days: 0.145,
-      mins: 60,
-      u: "小時"
-    };
-  }
-  if (iv === "1wk") {
-    return {
-      t: "週線",
-      days: 7.0,
-      mins: 1440,
-      u: "週"
-    };
-  }
-  if (iv === "1mo") {
-    return {
-      t: "月線",
-      days: 30.44,
-      mins: 1440,
-      u: "月"
-    };
-  }
-  return {
-    t: "日線",
-    days: 1.45,
-    mins: 1440,
-    u: "日"
-  };
-}
-
-function syncTimeModeVis() {
-  const box = document.getElementById(
-    "tModeSeg"
-  );
-  box.style.display =
-    isIntraday(st.interval)
-    ? "none" : "inline-flex";
-}
-
-function savePrefs() {
-  const obj = {
-    market: st.market,
-    code: st.code,
-    name: st.name,
-    style: st.style,
-    interval: st.interval,
-    horizon: st.horizon,
-    dir: st.dir,
-    timeMode: st.timeMode,
-    volMult: st.volMult,
-    showSwing: st.showSwing,
-    showGrid: st.showGrid,
-    showFib: st.showFib,
-    showHarm: st.showHarm,
-    histBars: st.histBars,
-    moveLine: st.moveLine
-  };
+function playWebAlarm() {
   try {
-    localStorage.setItem(
-      PREF_KEY,
-      JSON.stringify(obj)
-    );
+    const Ctx =
+      window.AudioContext ||
+      window.webkitAudioContext;
+    const ctx = new Ctx();
+    const now = ctx.currentTime;
+    for (let i = 0; i < 4; i++) {
+      const osc =
+        ctx.createOscillator();
+      const gain =
+        ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(
+        i % 2 === 0 ? 880 : 1175,
+        now + i * 0.16
+      );
+      gain.gain.setValueAtTime(
+        0.25,
+        now + i * 0.16
+      );
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        now + i * 0.16 + 0.14
+      );
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.16);
+      osc.stop(now + i * 0.16 + 0.15);
+    }
   } catch (e) {}
 }
 
-function persistSaved() {
-  try {
-    localStorage.setItem(
-      SAVED_KEY,
-      JSON.stringify(st.saved)
-    );
-  } catch (e) {}
-}
-
-function recordSaved(sym, nm, mkt) {
-  const disp = nm || sym;
-  st.saved = st.saved.filter(
-    x => x.s !== sym
+function startWebRingLoop() {
+  clearInterval(st.ringTimer);
+  playWebAlarm();
+  st.ringTimer = setInterval(
+    playWebAlarm,
+    2200
   );
-  st.saved.unshift({
-    s: sym,
-    n: disp,
-    m: mkt
-  });
-  if (st.saved.length > 30) {
-    st.saved = st.saved.slice(0, 30);
-  }
-  persistSaved();
-  fillPresets();
 }
 
-function restoreState() {
-  const rawS =
-    localStorage.getItem(SAVED_KEY);
-  if (rawS != null) {
+function loadAlertsLocal() {
+  st.barkKey =
+    localStorage.getItem(BARK_KEY) || "";
+  const raw =
+    localStorage.getItem(ALERT_KEY);
+  if (raw) {
     try {
-      st.saved = JSON.parse(rawS);
+      st.alerts = JSON.parse(raw);
     } catch (e) {
-      st.saved = [];
+      st.alerts = [];
     }
-  } else {
-    st.saved = [
-      {
-        s: "^HSI",
-        n: "恒生指數",
-        m: "hk"
-      },
-      {
-        s: "0700.HK",
-        n: "騰訊控股",
-        m: "hk"
-      },
-      {
-        s: "^IXIC",
-        n: "納斯達克指數",
-        m: "us"
-      },
-      {
-        s: "AAPL",
-        n: "蘋果公司 Apple",
-        m: "us"
-      }
-    ];
-    persistSaved();
   }
-
-  const rawP =
-    localStorage.getItem(PREF_KEY);
-  if (rawP) {
-    try {
-      const p = JSON.parse(rawP);
-      if (p.market) st.market = p.market;
-      if (p.code) st.code = p.code;
-      if (p.name != null) {
-        st.name = p.name;
-      }
-      if (p.style) st.style = p.style;
-      if (p.interval) {
-        st.interval = p.interval;
-      }
-      if (p.horizon) {
-        st.horizon = p.horizon;
-      }
-      if (p.dir) st.dir = p.dir;
-      if (p.timeMode) {
-        st.timeMode = p.timeMode;
-      }
-      if (p.volMult) {
-        st.volMult = p.volMult;
-      }
-      if (typeof p.showSwing === "boolean") {
-        st.showSwing = p.showSwing;
-      }
-      if (typeof p.showGrid === "boolean") {
-        st.showGrid = p.showGrid;
-      }
-      if (typeof p.showFib === "boolean") {
-        st.showFib = p.showFib;
-      }
-      if (typeof p.showHarm === "boolean") {
-        st.showHarm = p.showHarm;
-      }
-      if (p.histBars) {
-        st.histBars = p.histBars;
-      }
-      if (typeof p.moveLine === "boolean") {
-        st.moveLine = p.moveLine;
-      }
-    } catch (e) {}
-  }
-
-  setSegVal("mktSeg", st.market);
-  setSegVal("stySeg", st.style);
-  setSegVal("intSeg", st.interval);
-  setSegVal("horSeg", st.horizon);
-  setSegVal("dirSeg", st.dir);
-  setSegVal("tModeSeg", st.timeMode);
-  syncTimeModeVis();
-  document.getElementById(
-    "codeInp"
-  ).value = st.code;
-  document.getElementById(
-    "togSwing"
-  ).classList.toggle("on", st.showSwing);
-  document.getElementById(
-    "togGrid"
-  ).classList.toggle("on", st.showGrid);
-  document.getElementById(
-    "togFib"
-  ).classList.toggle("on", st.showFib);
-  document.getElementById(
-    "togHarm"
-  ).classList.toggle("on", st.showHarm);
-  document.getElementById(
-    "volLbl"
-  ).textContent =
-    "波動:" +
-    st.volMult.toFixed(1) + "x";
-
-  const bMode =
-    document.getElementById("btnMode");
-  bMode.textContent = st.moveLine
-    ? "移動時間線" : "拖動歷史";
-  bMode.classList.toggle(
-    "btn-hi",
-    st.moveLine
-  );
-  bMode.classList.toggle(
-    "on",
-    !st.moveLine
-  );
+  updateAlertBtnBadge();
 }
 
-function fmt(v) {
-  return Number(v).toFixed(2);
-}
-
-function fmtAxisP(p) {
-  if (p >= 10000) {
-    return Math.round(p).toString();
-  }
-  if (p >= 1000) {
-    return Number(p).toFixed(1);
-  }
-  return Number(p).toFixed(2);
-}
-
-function fmtDate(d, withTime) {
-  const y = d.getFullYear();
-  const m = String(
-    d.getMonth() + 1
-  ).padStart(2, "0");
-  const day = String(
-    d.getDate()
-  ).padStart(2, "0");
-  if (!withTime) {
-    return y + "-" + m + "-" + day;
-  }
-  const hh = String(
-    d.getHours()
-  ).padStart(2, "0");
-  const mm = String(
-    d.getMinutes()
-  ).padStart(2, "0");
-  return m + "-" + day +
-    " " + hh + ":" + mm;
-}
-
-function addDays(d, days) {
-  const ms = d.getTime() +
-    days * 86400000;
-  return new Date(ms);
-}
-
-function addTradingBars(
-  date,
-  bars,
-  iv
-) {
-  let cur = new Date(date.getTime());
-  const mins = intvMeta(iv).mins;
-  let left = Math.abs(bars);
-  const dir = bars >= 0 ? 1 : -1;
-  while (left > 0) {
-    cur = new Date(
-      cur.getTime() +
-        dir * mins * 60000
+async function syncAlertsCloud() {
+  try {
+    localStorage.setItem(
+      BARK_KEY,
+      st.barkKey
     );
-    const wd = cur.getDay();
-    if (wd === 0 || wd === 6) {
-      continue;
-    }
-    left--;
-  }
-  return cur;
-}
-
-function dateForIndex(
-  candles,
-  idx,
-  iv
-) {
-  if (candles.length === 0) {
-    return new Date();
-  }
-  const lastI = candles.length - 1;
-  if (idx >= 0 && idx <= lastI) {
-    return candles[idx].date;
-  }
-  const diff = idx - lastI;
-  if (isIntraday(iv)) {
-    return addTradingBars(
-      candles[lastI].date,
-      diff,
-      iv
+    localStorage.setItem(
+      ALERT_KEY,
+      JSON.stringify(st.alerts)
     );
-  }
-  return addDays(
-    candles[lastI].date,
-    diff * intvMeta(iv).days
-  );
+  } catch (e) {}
+  updateAlertBtnBadge();
+  try {
+    await fetch(
+      "/.netlify/functions/yahoo" +
+      "?action=sync_alerts",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+        body: JSON.stringify({
+          barkKey: st.barkKey,
+          alerts: st.alerts
+        })
+      }
+    );
+  } catch (e) {}
 }
 
-function barTimeDelta(
-  candles,
-  fromIdx,
-  toIdx,
-  iv,
-  tMode
-) {
-  if (isIntraday(iv) ||
-    tMode === "trading") {
-    return toIdx - fromIdx;
+function updateAlertBtnBadge() {
+  const cnt = st.alerts.filter(
+    a => a.isEnabled && !a.isTriggered
+  ).length;
+  const b = document.getElementById(
+    "btnAlerts"
+  );
+  if (b) {
+    b.textContent = cnt > 0
+      ? "🔔 到價(" + cnt + ")"
+      : "🔔 到價";
   }
-  const d1 = dateForIndex(
-    candles,
-    fromIdx,
-    iv
-  );
-  const d2 = dateForIndex(
-    candles,
-    toIdx,
-    iv
-  );
-  const calD =
-    (d2.getTime() - d1.getTime()) /
-    86400000;
-  if (iv === "1d") return calD;
-  if (iv === "1wk") return calD / 7.0;
-  return calD / 30.4375;
 }
 
-function priceAtBar(bar) {
+function openAlertModal() {
   const cs = st.candles;
-  if (cs.length === 0) return 0;
-  if (bar >= 0 && bar < cs.length) {
-    return cs[bar].close;
+  const curP = cs.length > 0
+    ? cs[cs.length - 1].close : 0;
+  const titleF = st.name
+    ? st.code + " " + st.name
+    : st.code;
+  document.getElementById(
+    "alCurSym"
+  ).textContent = "標的：" + titleF;
+  document.getElementById(
+    "alCurP"
+  ).textContent =
+    "現價：" + fmt(curP);
+  document.getElementById(
+    "barkKeyInp"
+  ).value = st.barkKey;
+  const tInp = document.getElementById(
+    "alTargetInp"
+  );
+  if (curP > 0) {
+    tInp.value = fmt(curP);
   }
-  if (st.res) {
+
+  const qBox = document.getElementById(
+    "alQuickFill"
+  );
+  qBox.innerHTML = "";
+  const addFillBtn = (lbl, val) => {
+    if (!val || val <= 0) return;
+    const btn =
+      document.createElement("button");
+    btn.className = "btn btn-c";
+    btn.style.fontSize = "11px";
+    btn.textContent =
+      lbl + "(" + fmt(val) + ")";
+    btn.onclick = () => {
+      tInp.value = fmt(val);
+      document.getElementById(
+        "alCondSel"
+      ).value = val >= curP
+        ? "向上突破" : "向下跌破";
+    };
+    qBox.appendChild(btn);
+  };
+
+  if (st.res && cs.length > 0) {
     const r = st.res;
+    const last = cs[cs.length - 1];
     const dt = barTimeDelta(
       cs,
       r.anc.index,
-      bar,
+      last.id,
       st.interval,
       r.effMode
     );
     const s = r.isUp ? 1 : -1;
-    return Math.max(
+    const p1 = Math.max(
       0,
       r.anc.price + s * r.vol * dt
     );
+    addFillBtn("1x1主線", p1);
+    if (r.harm) {
+      const hd =
+        (r.harm.przLo + r.harm.przHi) /
+        2;
+      addFillBtn("和諧D點", hd);
+    }
   }
-  return cs[cs.length - 1].close;
+  renderAlertList();
+  document.getElementById(
+    "alertModal"
+  ).style.display = "flex";
 }
 
-function fullDateAtBar(bar) {
-  const cs = st.candles;
-  if (cs.length === 0) return "--";
-  const dt = dateForIndex(
-    cs,
-    bar,
-    st.interval
+function renderAlertList() {
+  const box = document.getElementById(
+    "alListBox"
   );
-  return fmtDate(
-    dt,
-    isIntraday(st.interval)
-  );
-}
-
-function shortDateAtBar(bar) {
-  const full = fullDateAtBar(bar);
-  if (isIntraday(st.interval)) {
-    return full;
-  }
-  if (full.length < 10) return full;
-  if (st.interval === "1mo") {
-    return full.slice(0, 7);
-  }
-  return full.slice(5);
-}
-
-function fillPill(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function normSym(raw, mkt) {
-  let c = raw.trim().toUpperCase();
-  if (!c) {
-    return mkt === "hk"
-      ? "^HSI" : "^IXIC";
-  }
-  const idx = [
-    "HSI", "HSCE", "IXIC",
-    "GSPC", "DJI"
-  ];
-  if (idx.includes(c)) {
-    return "^" + c;
-  }
-  if (c === "BRK.B") c = "BRK-B";
-  if (c === "BRK.A") c = "BRK-A";
-  if (mkt === "hk" &&
-    !c.endsWith(".HK") &&
-    !c.startsWith("^")) {
-    const d = c.replace(/\D/g, "");
-    if (d.length > 0) {
-      return d.padStart(4, "0") +
-        ".HK";
-    }
-  }
-  return c;
-}
-
-async function searchStocks(q) {
-  const clean = q.trim();
-  if (!clean) return [];
-  const up = clean.toUpperCase();
-  const list = [];
-  const seen = new Set();
-
-  for (const item of CATALOG) {
-    const mS = item.s
-      .toUpperCase()
-      .includes(up);
-    const mN = item.n
-      .toUpperCase()
-      .includes(up);
-    if (mS || mN) {
-      list.push(item);
-      seen.add(item.s);
-    }
-  }
-
-  try {
-    const url =
-      "/.netlify/functions/yahoo" +
-      "?action=search&q=" +
-      encodeURIComponent(clean);
-    const r = await fetch(url);
-    if (r.ok) {
-      const j = await r.json();
-      const qts = j?.quotes || [];
-      for (const qt of qts) {
-        const sym = qt.symbol;
-        if (!sym || seen.has(sym)) {
-          continue;
-        }
-        const exR = (
-          qt.exchDisp ||
-          qt.exchange || "US"
-        ).toUpperCase();
-        const isHK =
-          sym.endsWith(".HK") ||
-          exR.includes("HKG") ||
-          exR.includes("HKSE");
-        const isOtc =
-          exR.includes("OTC") ||
-          exR.includes("PNK") ||
-          exR.includes("PINK");
-        const tpR = (
-          qt.quoteType || ""
-        ).toUpperCase();
-        let tp = "股票";
-        if (tpR === "ETF") tp = "ETF";
-        if (tpR === "INDEX") tp = "指數";
-        list.push({
-          s: sym,
-          n: NAMES[sym] ||
-            qt.shortname ||
-            qt.longname || sym,
-          ex: isHK
-            ? "HKEX"
-            : (isOtc ? "OTC" : exR),
-          tp,
-          m: isHK ? "hk" : "us",
-          otc: isOtc
-        });
-        seen.add(sym);
-      }
-    }
-  } catch (e) {}
-
-  list.sort((a, b) => {
-    if (a.otc !== b.otc) {
-      return a.otc ? 1 : -1;
-    }
-    return 0;
-  });
-  return list.slice(0, 8);
-}
-
-function renderAc(items) {
-  const box =
-    document.getElementById("acBox");
+  document.getElementById(
+    "alListCnt"
+  ).textContent =
+    "監控清單 (" +
+    st.alerts.length + ")";
   box.innerHTML = "";
-  if (!items || items.length === 0) {
-    box.style.display = "none";
+  if (st.alerts.length === 0) {
+    box.innerHTML =
+      '<div class="lbl">暫無到價警報</div>';
     return;
   }
-  for (const it of items) {
+  for (const it of st.alerts) {
     const row =
       document.createElement("div");
-    row.className = "ac-item";
+    row.className = "al-row";
+    const stTxt = it.isTriggered
+      ? "已觸發"
+      : (it.isEnabled
+        ? "監控中" : "已停用");
+    const stCol = it.isTriggered
+      ? "#fb923c"
+      : (it.isEnabled
+        ? "#34d399" : "#94a3b8");
 
-    const spS =
+    const top =
+      document.createElement("div");
+    top.style.display = "flex";
+    top.style.alignItems = "center";
+    top.style.gap = "6px";
+
+    const symSp =
       document.createElement("span");
-    spS.className = "ac-sym";
-    spS.textContent = it.s;
+    symSp.style.color = "#facc15";
+    symSp.style.fontWeight = "700";
+    symSp.style.fontSize = "12px";
+    symSp.textContent =
+      it.symbol + " " + it.name;
 
-    const spN =
+    const condSp =
       document.createElement("span");
-    spN.className = "ac-nm";
-    spN.textContent = it.n;
+    condSp.style.color = "#38bdf8";
+    condSp.style.fontSize = "12px";
+    condSp.textContent =
+      it.condition + " " +
+      fmt(it.targetPrice);
 
-    const spB =
+    const sp =
+      document.createElement("div");
+    sp.className = "sp";
+
+    const tag =
       document.createElement("span");
-    spB.className = it.otc
-      ? "ac-bdg ac-otc"
-      : "ac-bdg";
-    spB.textContent =
-      it.ex + "·" + it.tp;
+    tag.style.color = stCol;
+    tag.style.fontSize = "11px";
+    tag.textContent = stTxt;
 
-    row.appendChild(spS);
-    row.appendChild(spN);
-    row.appendChild(spB);
-
-    row.onclick = () => {
-      box.style.display = "none";
-      st.market = it.m;
-      setSegVal("mktSeg", it.m);
-      savePrefs();
-      document.getElementById(
-        "codeInp"
-      ).value = it.s;
-      loadSymbol();
+    const delB =
+      document.createElement("button");
+    delB.className = "btn btn-del";
+    delB.textContent = "刪";
+    delB.onclick = () => {
+      st.alerts = st.alerts.filter(
+        x => x.id !== it.id
+      );
+      syncAlertsCloud();
+      renderAlertList();
     };
+
+    top.appendChild(symSp);
+    top.appendChild(condSp);
+    top.appendChild(sp);
+    top.appendChild(tag);
+    top.appendChild(delB);
+
+    const note =
+      document.createElement("div");
+    note.style.fontSize = "12px";
+    note.style.color = "#e2e8f0";
+    note.textContent =
+      "方案：" + it.planNote;
+
+    row.appendChild(top);
+    row.appendChild(note);
     box.appendChild(row);
   }
-  box.style.display = "block";
 }
 
-async function fetchYahoo(sym, iv) {
-  let rng = "5y";
-  if (iv === "15m") rng = "30d";
-  if (iv === "30m") rng = "60d";
-  if (iv === "60m") rng = "180d";
-  if (iv === "1wk") rng = "15y";
-  if (iv === "1mo") rng = "max";
-  const enc = encodeURIComponent(sym);
-  const q1 =
-    "https://query1.finance.yahoo.com" +
-    "/v8/finance/chart/" + enc +
-    "?range=" + rng +
-    "&interval=" + iv +
-    "&includePrePost=false";
-  const enc1 = encodeURIComponent(q1);
-
-  const routes = [
-    {
-      name: "雲端直連",
-      ms: 14000,
-      url:
-        "/.netlify/functions/yahoo" +
-        "?symbol=" + enc +
-        "&interval=" + iv +
-        "&range=" + rng
-    },
-    {
-      name: "代理節點2 (AllOrigins)",
-      ms: 7500,
-      url:
-        "https://api.allorigins.win" +
-        "/raw?url=" + enc1
-    },
-    {
-      name: "代理節點3 (CorsProxy)",
-      ms: 7500,
-      url:
-        "https://corsproxy.io/?" + enc1
-    },
-    {
-      name: "代理節點4 (CodeTabs)",
-      ms: 7500,
-      url:
-        "https://api.codetabs.com" +
-        "/v1/proxy?quest=" + enc1
-    }
-  ];
-
-  const cKey =
-    "gann_web4_" + sym + "_" + iv;
-  const ld =
-    document.getElementById("loadBox");
-
-  for (let i = 0;
-    i < routes.length; i++) {
-    const rt = routes[i];
-    ld.textContent =
-      "嘗試 " + rt.name + "...";
-    try {
-      const ctrl = new AbortController();
-      const tid = setTimeout(
-        () => ctrl.abort(),
-        rt.ms
-      );
-      const r = await fetch(rt.url, {
-        signal: ctrl.signal
-      });
-      clearTimeout(tid);
-      if (!r.ok) continue;
-      const srcHdr =
-        r.headers.get("X-Source");
-      const json = await r.json();
-      const parsed = parseYahoo(
-        json,
-        sym,
-        iv
-      );
-      if (parsed.candles.length > 0) {
-        parsed.source = srcHdr
-          ? "雲端:" + srcHdr
-          : rt.name;
-        parsed.isCache = false;
-        try {
-          localStorage.setItem(
-            cKey,
-            JSON.stringify(parsed)
-          );
-        } catch (e) {}
-        return parsed;
-      }
-    } catch (e) {}
-  }
-
-  const saved =
-    localStorage.getItem(cKey);
-  if (saved) {
-    const obj = JSON.parse(saved);
-    obj.candles.forEach(b => {
-      b.date = new Date(b.date);
-    });
-    obj.source = "本地快取數據";
-    obj.isCache = true;
-    return obj;
-  }
-  throw new Error("所有線路均繁忙");
-}
-
-function parseYahoo(json, sym, iv) {
-  const res =
-    json?.chart?.result?.[0];
-  const ts = res?.timestamp;
-  const q =
-    res?.indicators?.quote?.[0];
-  if (!ts || !q) {
-    return {
-      symbol: sym,
-      name: "",
-      candles: []
-    };
-  }
-  const apiN =
-    res.meta?.shortName ||
-    res.meta?.longName || "";
-  const fn = NAMES[sym] || apiN;
-  const reg = res.meta
-    ?.currentTradingPeriod?.regular;
-  const rs = reg?.start;
-  const re = reg?.end;
-  const intra = isIntraday(iv);
-
-  const list = [];
-  let idx = 0;
-  for (let i = 0; i < ts.length; i++) {
-    const o = q.open[i];
-    const h = q.high[i];
-    const l = q.low[i];
-    const c = q.close[i];
-    if (o == null || h == null ||
-      l == null || c == null) {
-      continue;
-    }
-    if (intra &&
-      rs != null && re != null) {
-      const dm = ts[i] % 86400;
-      const rsm = rs % 86400;
-      const rem = re % 86400;
-      if (rsm < rem &&
-        (dm < rsm || dm > rem)) {
-        continue;
-      }
-    }
-    const v =
-      (q.volume && q.volume[i]) || 0;
-    list.push({
-      id: idx,
-      date: new Date(ts[i] * 1000),
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-      volume: v
-    });
-    idx++;
-  }
-  return {
-    symbol: sym,
-    name: fn,
-    candles: list
-  };
-}
-
-function buildMechSwings(
-  candles,
-  order
-) {
-  if (candles.length < 3) return [];
-  const act = [candles[0]];
-  for (
-    let i = 1;
-    i < candles.length;
-    i++
-  ) {
-    const cur = candles[i];
-    const prev = act[act.length - 1];
-    const inside =
-      cur.high <= prev.high &&
-      cur.low >= prev.low;
-    if (!inside) act.push(cur);
-  }
-  if (act.length < 3) return [];
-
-  const res = [];
-  let dir = 0;
-  let upC = 0;
-  let dnC = 0;
-  let extH = act[0];
-  let extL = act[0];
-
-  for (let i = 1; i < act.length; i++) {
-    const c = act[i];
-    const p = act[i - 1];
-    const hh = c.high > p.high;
-    const ll = c.low < p.low;
-    if (hh && !ll) {
-      upC++;
-      dnC = 0;
-    } else if (ll && !hh) {
-      dnC++;
-      upC = 0;
-    }
-
-    if (dir === 0) {
-      if (upC >= order) {
-        res.push({
-          index: extL.id,
-          date: extL.date,
-          price: extL.low,
-          isHigh: false
-        });
-        dir = 1;
-        extH = c;
-      } else if (dnC >= order) {
-        res.push({
-          index: extH.id,
-          date: extH.date,
-          price: extH.high,
-          isHigh: true
-        });
-        dir = -1;
-        extL = c;
-      } else {
-        if (c.high > extH.high) {
-          extH = c;
-        }
-        if (c.low < extL.low) {
-          extL = c;
-        }
-      }
-    } else if (dir === 1) {
-      if (c.high >= extH.high) {
-        extH = c;
-      }
-      if (dnC >= order) {
-        res.push({
-          index: extH.id,
-          date: extH.date,
-          price: extH.high,
-          isHigh: true
-        });
-        dir = -1;
-        extL = c;
-      }
-    } else {
-      if (c.low <= extL.low) {
-        extL = c;
-      }
-      if (upC >= order) {
-        res.push({
-          index: extL.id,
-          date: extL.date,
-          price: extL.low,
-          isHigh: false
-        });
-        dir = 1;
-        extH = c;
-      }
-    }
-  }
-  const tail = dir >= 0 ? extH : extL;
-  if (res.length === 0 ||
-    res[res.length - 1].index !==
-      tail.id) {
-    res.push({
-      index: tail.id,
-      date: tail.date,
-      price: dir >= 0
-        ? tail.high : tail.low,
-      isHigh: dir >= 0
-    });
-  }
-  return res;
-}
-
-function calcMechStop(
-  candles,
-  mechSwings,
-  isUp,
-  iv
-) {
-  const last =
-    candles[candles.length - 1];
-  const intra = isIntraday(iv);
-  const defUp = intra ? 0.985 : 0.96;
-  const defDn = intra ? 1.015 : 1.04;
-  const defLbl = intra
-    ? "日內1.5%窄幅硬性止損"
-    : "江恩4%標準保護止損";
-
-  let stUp = 0;
-  let stDn = 0;
-  let i = candles.length - 1;
-  while (i > 0) {
-    const c = candles[i];
-    const p = candles[i - 1];
-    if (c.high > p.high &&
-      c.low >= p.low && stDn === 0) {
-      stUp++;
-    } else if (c.low < p.low &&
-      c.high <= p.high && stUp === 0) {
-      stDn++;
-    } else {
-      break;
-    }
-    i--;
-  }
-
-  const mid =
-    (last.high + last.low) / 2;
-  if (isUp) {
-    if (stUp >= 7) {
-      return {
-        p: last.low * 0.996,
-        why: "連續" + stUp +
-          "期單邊(7期法則收緊止損)"
-      };
-    }
-    const prevH = candles.length >= 2
-      ? candles[
-        candles.length - 2
-      ].high : last.high;
-    const isSigTop =
-      last.high > prevH &&
-      last.close < last.open &&
-      last.close < mid;
-    if (isSigTop) {
-      return {
-        p: last.low * 0.996,
-        why: "出現三重信號頂部(" +
-          "破低即止盈離場)"
-      };
-    }
-    const lows = mechSwings.filter(
-      s => !s.isHigh &&
-        s.price < last.close
-    );
-    if (lows.length > 0) {
-      const lp = lows[lows.length - 1];
-      return {
-        p: lp.price * 0.995,
-        why: "機械擺動底(" +
-          fmtDate(lp.date, intra) + ")"
-      };
-    }
-    return {
-      p: last.close * defUp,
-      why: defLbl
-    };
-  } else {
-    if (stDn >= 7) {
-      return {
-        p: last.high * 1.004,
-        why: "連續" + stDn +
-          "期單邊(7期法則收緊止損)"
-      };
-    }
-    const prevL = candles.length >= 2
-      ? candles[
-        candles.length - 2
-      ].low : last.low;
-    const isSigBot =
-      last.low < prevL &&
-      last.close > last.open &&
-      last.close > mid;
-    if (isSigBot) {
-      return {
-        p: last.high * 1.004,
-        why: "出現三重信號底部(" +
-          "升破即空單平倉)"
-      };
-    }
-    const highs = mechSwings.filter(
-      s => s.isHigh &&
-        s.price > last.close
-    );
-    if (highs.length > 0) {
-      const hp = highs[
-        highs.length - 1
-      ];
-      return {
-        p: hp.price * 1.005,
-        why: "機械擺動頂(" +
-          fmtDate(hp.date, intra) + ")"
-      };
-    }
-    return {
-      p: last.close * defDn,
-      why: defLbl
-    };
-  }
-}
-
-function calcOverbalance(
-  candles,
-  swings,
-  isUp,
-  iv,
-  tMode
-) {
-  if (swings.length < 4) {
-    return "波段數據累積中，平衡正常";
-  }
-  const last =
-    candles[candles.length - 1];
-  const u = intvMeta(iv).u;
-  let maxDrop = 0;
-  let maxBars = 0;
-
-  for (
-    let i = 1;
-    i < swings.length;
-    i++
-  ) {
-    const a = swings[i - 1];
-    const b = swings[i];
-    const dt = Math.abs(barTimeDelta(
-      candles,
-      a.index,
-      b.index,
-      iv,
-      tMode
-    ));
-    if (isUp && a.isHigh && !b.isHigh) {
-      const dp = a.price - b.price;
-      maxDrop = Math.max(maxDrop, dp);
-      maxBars = Math.max(maxBars, dt);
-    } else if (!isUp &&
-      !a.isHigh && b.isHigh) {
-      const dp = b.price - a.price;
-      maxDrop = Math.max(maxDrop, dp);
-      maxBars = Math.max(maxBars, dt);
-    }
-  }
-
-  const tail =
-    swings[swings.length - 1];
-  if (!tail || maxDrop <= 0) {
-    return "時空平衡維持正常";
-  }
-  const curDt = Math.abs(barTimeDelta(
-    candles,
-    tail.index,
-    last.id,
-    iv,
-    tMode
-  ));
-  const curDp = isUp
-    ? Math.max(
-      0,
-      tail.price - last.low
-    )
-    : Math.max(
-      0,
-      last.high - tail.price
-    );
-
-  const pOver = curDp > maxDrop;
-  const tOver = curDt > maxBars &&
-    curDp > maxDrop * 0.5;
-  const mTS = Math.round(maxBars);
-  const cTS = Math.round(curDt);
-
-  if (pOver || tOver) {
-    return "⚠️已觸發平衡超越！當前" +
-      "回調" + fmt(curDp) +
-      "(" + cTS + u + ")" +
-      "已超前浪極值" + fmt(maxDrop) +
-      "(" + mTS + u + ")，防範反轉";
-  }
-  return "平衡正常（前浪最大回調" +
-    fmt(maxDrop) + " / " + mTS + u +
-    "，當前" + fmt(curDp) +
-    " / " + cTS + u + "）";
-}
-
-function calcVolumeDiag(candles) {
-  const valid = candles.filter(
-    c => (c.volume || 0) > 0
-  );
-  if (valid.length < 60) {
-    return "指數/無成交量數據，略過量能";
-  }
-  const n = candles.length;
-  const rec50 = candles
-    .slice(-50)
-    .reduce(
-      (s, c) => s + (c.volume || 0),
-      0
-    );
-  const prev50 = candles
-    .slice(-100, -50)
-    .reduce(
-      (s, c) => s + (c.volume || 0),
-      0
-    );
-  const yr = candles.slice(-250);
-  const maxV = Math.max(
-    ...yr.map(c => c.volume || 0),
-    1
-  );
-  const curV =
-    candles[n - 1].volume || 0;
-  const shrink = curV / maxV;
-
-  const tags = [];
-  if (prev50 > 0) {
-    const rt = rec50 / prev50;
-    const rS = rt.toFixed(2);
-    if (rt >= 2.0) {
-      tags.push(
-        "50期吸籌動量比 " + rS +
-        "x(>2.0主力顯著放量)"
-      );
-    } else {
-      tags.push(
-        "50期量能動量比 " + rS + "x"
-      );
-    }
-  }
-  if (shrink > 0 && shrink <= 0.25) {
-    const pct = Math.round(
-      shrink * 100
-    );
-    tags.push(
-      "當前成交量僅區間峰值" + pct +
-      "%（符合「地量見地價」特徵）"
-    );
-  }
-  return tags.join("；");
-}
-
-function calcDailyGuide(
-  dailyCs,
-  iv,
-  isUpFan
-) {
-  if (!isIntraday(iv)) return "";
-  if (dailyCs.length < 20) {
-    return "日線定方向：載入日線結構中";
-  }
-  const dSw = detectSwings(
-    dailyCs,
-    "1d"
-  );
-  const dAnc = pickAnchor(
-    dailyCs,
-    dSw,
-    null,
-    "auto"
-  );
-  const dUp = !dAnc.isHigh;
-  const dVol = calcVol(
-    dailyCs,
-    dAnc,
-    dSw,
-    "1d",
-    "trading"
-  );
-  const lastD =
-    dailyCs[dailyCs.length - 1];
-  const dt = lastD.id - dAnc.index;
-  const s = dUp ? 1 : -1;
-  const p1 = Math.max(
-    0,
-    dAnc.price + s * dVol * dt
-  );
-  const above = lastD.close >= p1;
-  const dTxt = above
-    ? "日線多頭強勢(1x1上方)"
-    : "日線空頭弱勢(1x1下方)";
-  const aln = (above === isUpFan)
-    ? "順應日線主趨勢"
-    : "⚠️逆日線主方向(僅作短線反抽)";
-  return dTxt + "｜" + aln;
-}
-
-function detectSwings(
-  candles,
-  iv = "1d"
-) {
-  const scope = candles.slice(-1260);
-  const his = scope.map(c => c.high);
-  const los = scope.map(c => c.low);
-  const hiA = Math.max(...his);
-  const loA = Math.min(...los);
-  const sp = (hiA - loA) /
-    Math.max(0.01, loA);
-  const intra = isIntraday(iv);
-  const minT = intra ? 0.006 : 0.025;
-  const maxT = intra ? 0.045 : 0.12;
-  const mult = intra ? 0.10 : 0.14;
-  const th = Math.max(
-    minT,
-    Math.min(maxT, sp * mult)
-  );
-  const pts = [];
-  let mode = 0;
-  let cHi = candles[0].high;
-  let cHiI = 0;
-  let cLo = candles[0].low;
-  let cLoI = 0;
-
-  for (const c of candles) {
-    if (c.high > cHi) {
-      cHi = c.high;
-      cHiI = c.id;
-    }
-    if (c.low < cLo) {
-      cLo = c.low;
-      cLoI = c.id;
-    }
-    if (mode === 0) {
-      const up = (c.high - cLo) /
-        Math.max(0.001, cLo);
-      const dn = (cHi - c.low) /
-        Math.max(0.001, cHi);
-      if (up >= th) {
-        pts.push({
-          index: cLoI,
-          date: candles[cLoI].date,
-          price: cLo,
-          isHigh: false
-        });
-        mode = 1;
-        cHi = c.high;
-        cHiI = c.id;
-      } else if (dn >= th) {
-        pts.push({
-          index: cHiI,
-          date: candles[cHiI].date,
-          price: cHi,
-          isHigh: true
-        });
-        mode = -1;
-        cLo = c.low;
-        cLoI = c.id;
-      }
-    } else if (mode === 1) {
-      const dr = (cHi - c.low) /
-        Math.max(0.001, cHi);
-      if (dr >= th) {
-        pts.push({
-          index: cHiI,
-          date: candles[cHiI].date,
-          price: cHi,
-          isHigh: true
-        });
-        mode = -1;
-        cLo = c.low;
-        cLoI = c.id;
-      }
-    } else {
-      const ri = (c.high - cLo) /
-        Math.max(0.001, cLo);
-      if (ri >= th) {
-        pts.push({
-          index: cLoI,
-          date: candles[cLoI].date,
-          price: cLo,
-          isHigh: false
-        });
-        mode = 1;
-        cHi = c.high;
-        cHiI = c.id;
-      }
-    }
-  }
-  return pts;
-}
-
-function pickAnchor(
-  candles,
-  swings,
-  customIdx,
-  dir
-) {
-  if (customIdx != null &&
-    customIdx >= 0 &&
-    customIdx < candles.length) {
-    const c = candles[customIdx];
-    let isH = false;
-    if (dir === "up") {
-      isH = false;
-    } else if (dir === "down") {
-      isH = true;
-    } else {
-      const mid = (c.high + c.low) / 2;
-      isH = c.close < mid;
-    }
-    return {
-      index: customIdx,
-      date: c.date,
-      price: isH ? c.high : c.low,
-      isHigh: isH
-    };
-  }
-  const lb = Math.min(
-    candles.length,
-    160
-  );
-  const start = candles.length - lb;
-  const rec = swings.filter(s =>
-    s.index >= start &&
-    s.index < candles.length - 5
-  );
-  if (dir === "up") {
-    const lows = rec.filter(
-      s => !s.isHigh
-    );
-    if (lows.length > 0) {
-      return lows[lows.length - 1];
-    }
-  } else if (dir === "down") {
-    const highs = rec.filter(
-      s => s.isHigh
-    );
-    if (highs.length > 0) {
-      return highs[highs.length - 1];
-    }
-  } else if (rec.length > 0) {
-    return rec[rec.length - 1];
-  }
-
-  if (dir === "down") {
-    let maxC = candles[start];
-    for (
-      let i = start;
-      i < candles.length;
-      i++
-    ) {
-      if (candles[i].high > maxC.high) {
-        maxC = candles[i];
-      }
-    }
-    return {
-      index: maxC.id,
-      date: maxC.date,
-      price: maxC.high,
-      isHigh: true
-    };
-  }
-  let minC = candles[start];
-  for (
-    let i = start;
-    i < candles.length;
-    i++
-  ) {
-    if (candles[i].low < minC.low) {
-      minC = candles[i];
-    }
-  }
-  return {
-    index: minC.id,
-    date: minC.date,
-    price: minC.low,
-    isHigh: false
-  };
-}
-
-function calcVol(
-  candles,
-  anc,
-  swings,
-  iv,
-  tMode
-) {
-  const eff = isIntraday(iv)
-    ? "trading" : tMode;
-  const aft = swings.filter(
-    s => s.index > anc.index + 3
-  );
-  if (aft.length > 0) {
-    const nx = aft[0];
-    const dp = Math.abs(
-      nx.price - anc.price
-    );
-    const dt = Math.abs(barTimeDelta(
-      candles,
-      anc.index,
-      nx.index,
-      iv,
-      eff
-    ));
-    return dp / Math.max(1, dt);
-  }
-  const last =
-    candles[candles.length - 1];
-  const dp = Math.abs(
-    last.close - anc.price
-  );
-  const dt = Math.abs(barTimeDelta(
-    candles,
-    anc.index,
-    last.id,
-    iv,
-    eff
-  ));
-  return dp / Math.max(1, dt);
-}
-
-function buildRays(
-  candles,
-  anc,
-  isUp,
-  vol,
-  endIdx,
-  iv,
-  tMode
-) {
-  const specs = [
-    ["8x1", 8],
-    ["4x1", 4],
-    ["3x1", 3],
-    ["2x1", 2],
-    ["1x1", 1],
-    ["1x2", 0.5],
-    ["1x3", 1 / 3],
-    ["1x4", 0.25],
-    ["1x8", 0.125]
-  ];
-  const sign = isUp ? 1 : -1;
-  return specs.map(([name, r]) => {
-    const pts = [];
-    const step = Math.max(
-      1,
-      Math.floor(
-        (endIdx - anc.index) / 60
-      )
-    );
-    let idx = anc.index;
-    while (idx <= endIdx) {
-      const dt = barTimeDelta(
-        candles,
-        anc.index,
-        idx,
-        iv,
-        tMode
-      );
-      const p = anc.price +
-        sign * vol * r * dt;
-      if (p >= 0) {
-        pts.push({
-          bar: idx,
-          price: p
-        });
-      }
-      idx += step;
-    }
-    if (pts.length === 0 ||
-      pts[pts.length - 1].bar < endIdx) {
-      const dt = barTimeDelta(
-        candles,
-        anc.index,
-        endIdx,
-        iv,
-        tMode
-      );
-      const pEnd = Math.max(
-        0,
-        anc.price +
-          sign * vol * r * dt
-      );
-      pts.push({
-        bar: endIdx,
-        price: pEnd
-      });
-    }
-    return {
-      name,
-      ratio: r,
-      isPrimary: name === "1x1",
-      pts
-    };
-  });
-}
-
-function solarTerm(dt) {
-  const m = dt.getMonth() + 1;
-  const d = dt.getDate();
-  const terms = [
-    [2, 4, "立春節氣(45度)"],
-    [3, 21, "春分節氣(0度)"],
-    [5, 6, "立夏節氣(45度)"],
-    [6, 21, "夏至節氣(90度)"],
-    [8, 8, "立秋節氣(135度)"],
-    [9, 23, "秋分節氣(180度)"],
-    [11, 7, "立冬節氣(225度)"],
-    [12, 22, "冬至節氣(270度)"]
-  ];
-  for (const [tm, td, nm] of terms) {
-    if (m === tm &&
-      Math.abs(d - td) <= 1) {
-      return nm;
-    }
-  }
-  return null;
-}
-
-function moonEvent(dt) {
-  const ref = 947182440000;
-  const syn = 29.53058867;
-  const diff =
-    (dt.getTime() - ref) / 86400000;
-  let ph = diff % syn;
-  if (ph < 0) ph += syn;
-  if (ph <= 1.0 || ph >= syn - 1.0) {
-    return "天文新月窗口";
-  }
-  if (Math.abs(ph - syn / 2) <= 1.0) {
-    return "天文滿月窗口";
-  }
-  return null;
-}
-
-function calcTimeHits(
-  candles,
-  anc,
-  swings,
-  vol,
-  hor,
-  iv,
-  tMode
-) {
-  const intra = isIntraday(iv);
-  const fibs = intra
-    ? [5, 8, 13, 21, 34, 55, 89, 144]
-    : [
-      5, 8, 13, 21, 34,
-      55, 89, 144, 233
-    ];
-  const g7 = intra
-    ? [
-      7, 12, 14, 18, 21, 24, 28,
-      30, 42, 45, 49, 60, 72, 90
-    ]
-    : [
-      7, 14, 28, 30, 42, 45, 49, 60,
-      77, 90, 120, 144, 180, 270, 360
-    ];
-  const lastI = candles.length - 1;
-  const lastD = candles[lastI].date;
-  const map = new Map();
-  const majSet = new Set();
-  const meta = intvMeta(iv);
-  const u = (tMode === "calendar" &&
-    iv === "1d")
-    ? "自然日" : meta.u;
-  const mSuf =
-    (tMode === "calendar" && !intra)
-    ? "(自然日)" : "";
-
-  const pushR = (t, msg, isMaj) => {
-    if (!map.has(t)) map.set(t, []);
-    map.get(t).push(msg);
-    if (isMaj) majSet.add(t);
-  };
-
-  const mapBar = (baseI, cnt) => {
-    if (intra ||
-      tMode === "trading") {
-      return baseI + cnt;
-    }
-    const baseD = dateForIndex(
-      candles,
-      baseI,
-      iv
-    );
-    const stepD = iv === "1d"
-      ? 1.0
-      : (iv === "1wk"
-        ? 7.0 : 30.4375);
-    const tD = addDays(
-      baseD,
-      cnt * stepD
-    );
-    const diff =
-      (tD.getTime() -
-        lastD.getTime()) / 86400000;
-    return lastI + Math.round(
-      diff / meta.days
-    );
-  };
-
-  for (const f of fibs) {
-    const t = mapBar(anc.index, f);
-    const d = t - lastI;
-    if (d >= 1 && d <= hor) {
-      pushR(
-        t,
-        "費波那契第" + f + u,
-        false
-      );
-    }
-  }
-  for (const g of g7) {
-    const t = mapBar(anc.index, g);
-    const d = t - lastI;
-    if (d >= 1 && d <= hor) {
-      let note = "";
-      if (iv === "60m" && g === 24) {
-        note = "(360度日循環)";
-      } else if (iv === "60m" &&
-        g === 49) {
-        note = "(7x7短線周期)";
-      } else if (iv === "30m" &&
-        g === 48) {
-        note = "(24小時360度)";
-      }
-      const m = intra
-        ? [21, 24, 30, 49, 60, 90]
-          .includes(g)
-        : [90, 180, 270, 360]
-          .includes(g);
-      pushR(
-        t,
-        "江恩神奇數" + g + u + note,
-        m
-      );
-    }
-  }
-
-  if (!intra && vol > 0) {
-    const sqU = Math.round(
-      anc.price / vol
-    );
-    const tSq = mapBar(
-      anc.index,
-      sqU
-    );
-    const dSq = tSq - lastI;
-    if (dSq >= 1 && dSq <= hor) {
-      pushR(
-        tSq,
-        "零度線時價成正方" + mSuf,
-        true
-      );
-    }
-  }
-
-  if (swings.length >= 2 && vol > 0) {
-    const pSw =
-      swings[swings.length - 2];
-    if (pSw.isHigh !== anc.isHigh) {
-      const pDiff = Math.abs(
-        pSw.price - anc.price
-      );
-      const crU = Math.round(
-        pDiff / (2 * vol)
-      );
-      const midB = Math.floor(
-        (pSw.index + anc.index) / 2
-      );
-      const tCr = mapBar(midB, crU);
-      const dCr = tCr - lastI;
-      if (dCr >= 1 && dCr <= hor) {
-        pushR(
-          tCr,
-          "雙1x1角度線幾何交叉",
-          true
-        );
-      }
-    }
-  }
-
-  if (!intra) {
-    const safeEnd = Math.max(
-      1,
-      lastI - 4
-    );
-    let topB = candles[0];
-    let botB = candles[0];
-    for (
-      let i = 0;
-      i < safeEnd;
-      i++
-    ) {
-      if (candles[i].high > topB.high) {
-        topB = candles[i];
-      }
-      if (candles[i].low < botB.low) {
-        botB = candles[i];
-      }
-    }
-
-    const addCir = (refI, rName) => {
-      const cs = iv === "1mo"
-        ? [60, 90, 120, 180, 240, 360]
-        : [90, 180, 270, 360];
-      for (const c of cs) {
-        const t = mapBar(refI, c);
-        const d = t - lastI;
-        if (d >= 1 && d <= hor) {
-          let note = "";
-          if (iv === "1wk" &&
-            c === 180) {
-            note = "(約3.5年)";
-          } else if (iv === "1wk" &&
-            c === 360) {
-            note = "(約7年)";
-          } else if (iv === "1mo" &&
-            c === 120) {
-            note = "(10年周期)";
-          } else if (iv === "1mo" &&
-            c === 360) {
-            note = "(30年土星)";
-          }
-          const msg = rName + "滿" +
-            c + u + note;
-          pushR(t, msg, true);
-        }
-      }
-    };
-    addCir(topB.id, "歷史大頂");
-    addCir(botB.id, "歷史大底");
-  }
-
-  if (swings.length > 0) {
-    const rec =
-      swings[swings.length - 1];
-    if (rec.index !== anc.index) {
-      const subN = intra
-        ? [7, 12, 18, 21, 30]
-        : [8, 13, 21, 34, 55];
-      for (const f of subN) {
-        const t = mapBar(
-          rec.index,
-          f
-        );
-        const d = t - lastI;
-        if (d >= 1 && d <= hor) {
-          pushR(
-            t,
-            "次波段第" + f + u,
-            false
-          );
-        }
-      }
-    }
-  }
-
-  if (iv === "1d") {
-    for (let d = 1; d <= hor; d++) {
-      const est = addDays(
-        lastD,
-        d * meta.days
-      );
-      const m = moonEvent(est);
-      if (m) pushR(lastI + d, m, false);
-      const stg = solarTerm(est);
-      if (stg) {
-        pushR(lastI + d, stg, false);
-      }
-    }
-  }
-
-  const keys = Array.from(
-    map.keys()
-  ).sort((a, b) => a - b);
-  const hits = [];
-  for (const k of keys) {
-    const rs = map.get(k);
-    const isMaj = majSet.has(k);
-    const keyHit = rs.some(s =>
-      s.includes("18") ||
-      s.includes("21") ||
-      s.includes("30") ||
-      s.includes("49") ||
-      s.includes("55") ||
-      s.includes("89") ||
-      s.includes("90") ||
-      s.includes("144") ||
-      s.includes("180") ||
-      s.includes("360") ||
-      s.includes("正方") ||
-      s.includes("交叉")
-    );
-    if (isMaj ||
-      rs.length >= 2 ||
-      keyHit) {
-      hits.push({
-        targetIndex: k,
-        estDate: dateForIndex(
-          candles,
-          k,
-          iv
-        ),
-        reasons: rs,
-        strength: rs.length,
-        isMajor: isMaj
-      });
-    }
-  }
-  return hits;
-}
-
-function calcFibs(candles, swings) {
-  const sub = candles.slice(-260);
-  const hi = Math.max(
-    ...sub.map(c => c.high)
-  );
-  const lo = Math.min(
-    ...sub.map(c => c.low)
-  );
-  const sp = hi - lo;
-  const rs = [
-    0.236, 0.382, 0.5,
-    0.618, 0.786, 1.272
-  ];
-  const mPrices = [];
-  if (swings.length >= 2) {
-    const a =
-      swings[swings.length - 2];
-    const b =
-      swings[swings.length - 1];
-    const mHi = Math.max(
-      a.price,
-      b.price
-    );
-    const mLo = Math.min(
-      a.price,
-      b.price
-    );
-    for (const r of rs) {
-      mPrices.push(
-        mHi - (mHi - mLo) * r
-      );
-    }
-  }
-  return rs.map(r => {
-    const p = hi - sp * r;
-    const conf = mPrices.some(mp =>
-      Math.abs(mp - p) /
-        Math.max(1, p) < 0.018
-    );
-    return {
-      ratio: r,
-      label: "黃金" +
-        Math.round(r * 1000),
-      price: p,
-      isConf: conf
-    };
-  });
-}
-
-function calcPctGrid(candles) {
-  const sub = candles.slice(-260);
-  const hi = Math.max(
-    ...sub.map(c => c.high)
-  );
-  const lo = Math.min(
-    ...sub.map(c => c.low)
-  );
-  const sp = hi - lo;
-  const gm = Math.sqrt(
-    Math.max(0.01, hi * lo)
-  );
-  const specs = [
-    [0.125, "1/8(12.5%)", false],
-    [0.25, "2/8(25%)", true],
-    [1 / 3, "1/3(33.3%)", true],
-    [0.375, "3/8(37.5%)", false],
-    [0.5, "4/8(50%中軸)", true],
-    [0.625, "5/8(62.5%)", false],
-    [2 / 3, "2/3(66.7%)", true],
-    [0.75, "6/8(75%)", true],
-    [0.875, "7/8(87.5%)", false],
-    [1.125, "延伸112.5%", false],
-    [4 / 3, "延伸133.3%", false],
-    [5 / 3, "延伸166.7%", false],
-    [2.0, "延伸200%", false]
-  ];
-  const levels = specs.map(
-    ([r, l, m]) => ({
-      ratio: r,
-      label: l,
-      price: lo + sp * r,
-      isMajor: m
-    })
-  );
-  return { levels, gm };
-}
-
-function checkCompletedValid(
-  candles,
-  dIdx,
-  bull,
-  xP,
-  przLo,
-  przHi
-) {
-  const start = dIdx + 1;
-  if (start >= candles.length) {
-    return { ok: true, unb: true };
-  }
-  let brokeAt = -1;
-  if (bull) {
-    const stp = Math.min(
-      przLo * 0.985,
-      xP * 0.99
-    );
-    for (
-      let i = start;
-      i < candles.length;
-      i++
-    ) {
-      if (candles[i].low < stp) {
-        brokeAt = i;
-        break;
-      }
-    }
-  } else {
-    const stp = Math.max(
-      przHi * 1.015,
-      xP * 1.01
-    );
-    for (
-      let i = start;
-      i < candles.length;
-      i++
-    ) {
-      if (candles[i].high > stp) {
-        brokeAt = i;
-        break;
-      }
-    }
-  }
-  if (brokeAt === -1) {
-    return { ok: true, unb: true };
-  }
-  return {
-    ok: brokeAt - dIdx >= 4,
-    unb: false
-  };
-}
-
-function checkProjValid(
-  candles,
-  fromIdx,
-  bull,
-  xP,
-  bP,
-  cP,
-  przLo,
-  przHi,
-  extLim
-) {
-  for (
-    let i = fromIdx;
-    i < candles.length;
-    i++
-  ) {
-    const bar = candles[i];
-    if (bull) {
-      const fl = Math.min(
-        przLo,
-        extLim
-      );
-      if (bar.low < fl ||
-        bar.low < xP ||
-        bar.high > cP) {
-        return false;
-      }
-    } else {
-      const cl = Math.max(
-        przHi,
-        extLim
-      );
-      if (bar.low < bP ||
-        bar.low < cP ||
-        bar.high > cl ||
-        bar.high > xP) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-function evalXABCD(
-  x,
-  a,
-  b,
-  c,
-  d,
-  candles,
-  isBack
-) {
-  const bull = !x.isHigh && a.isHigh;
-  const dirOk = bull
-    ? (a.isHigh && !b.isHigh &&
-      c.isHigh && !d.isHigh)
-    : (!a.isHigh && b.isHigh &&
-      !c.isHigh && d.isHigh);
-  const ordOk = bull
-    ? (a.price > c.price &&
-      c.price > b.price &&
-      b.price > d.price)
-    : (a.price < c.price &&
-      c.price < b.price &&
-      b.price < d.price);
-  if (!dirOk || !ordOk) return null;
-
-  const xa = Math.abs(
-    a.price - x.price
-  );
-  const ab = Math.abs(
-    b.price - a.price
-  );
-  const bc = Math.abs(
-    c.price - b.price
-  );
-  const ad = Math.abs(
-    d.price - a.price
-  );
-  if (xa <= 0 || ab <= 0 || bc <= 0) {
-    return null;
-  }
-  const rAb = ab / xa;
-  const rAd = ad / xa;
-  let nm = "";
-  if (rAb >= 0.35 &&
-    rAb <= 0.54 &&
-    rAd >= 0.82 &&
-    rAd <= 0.94) {
-    nm = bull
-      ? "看漲蝙蝠形態"
-      : "看跌蝙蝠形態";
-  } else if (rAb >= 0.55 &&
-    rAb <= 0.68 &&
-    rAd >= 0.73 &&
-    rAd <= 0.84) {
-    nm = bull
-      ? "看漲伽利222"
-      : "看跌伽利222";
-  } else {
-    const cd = Math.abs(
-      d.price - c.price
-    );
-    const cdAb = cd / ab;
-    if (cdAb >= 0.88 &&
-      cdAb <= 1.35) {
-      nm = bull
-        ? "看漲ABCD形態"
-        : "看跌ABCD形態";
-    }
-  }
-  if (!nm) return null;
-
-  const przLo = d.price * 0.985;
-  const przHi = d.price * 1.015;
-  const chk = checkCompletedValid(
-    candles,
-    d.index,
-    bull,
-    x.price,
-    przLo,
-    przHi
-  );
-  if (!chk.ok) return null;
-
-  const tag = isBack ? "(回溯)" : "";
-  return {
-    unb: chk.unb,
-    pat: {
-      name: nm + tag,
-      bull,
-      done: true,
-      nodes: [
-        { l: "X", ...x },
-        { l: "A", ...a },
-        { l: "B", ...b },
-        { l: "C", ...c },
-        { l: "D", ...d }
-      ],
-      przLo,
-      przHi,
-      dDate: d.date
-    }
-  };
-}
-
-function projXABC(
-  x,
-  a,
-  b,
-  c,
-  candles,
-  lastI,
-  iv
-) {
-  const xa = Math.abs(
-    a.price - x.price
-  );
-  const ab = Math.abs(
-    b.price - a.price
-  );
-  if (xa <= 0 || ab <= 0) {
-    return null;
-  }
-  const rAb = ab / xa;
-  const bull = !x.isHigh && a.isHigh;
-  let nm = bull
-    ? "潛在看漲ABCD"
-    : "潛在看跌ABCD";
-  let bcR = 1.272;
-  if (rAb >= 0.35 && rAb <= 0.54) {
-    nm = bull
-      ? "潛在看漲蝙蝠222"
-      : "潛在看跌蝙蝠222";
-    bcR = 1.618;
-  } else if (rAb >= 0.55 &&
-    rAb <= 0.72) {
-    nm = bull
-      ? "潛在看漲伽利222"
-      : "潛在看跌伽利222";
-    bcR = 1.272;
-  }
-
-  let dP = 0;
-  let ext1618 = 0;
-  if (bull) {
-    const dirOk = a.isHigh &&
-      !b.isHigh && c.isHigh;
-    const cb = c.price - b.price;
-    if (!dirOk || cb <= 0) return null;
-    dP = c.price - bcR * cb;
-    ext1618 = c.price - 1.618 * cb;
-    const ok = dP > 0 &&
-      a.price > c.price &&
-      c.price > b.price &&
-      b.price > dP;
-    if (!ok) return null;
-  } else {
-    const dirOk = !a.isHigh &&
-      b.isHigh && !c.isHigh;
-    const bc = b.price - c.price;
-    if (!dirOk || bc <= 0) return null;
-    dP = c.price + bcR * bc;
-    ext1618 = c.price + 1.618 * bc;
-    const ok =
-      a.price < c.price &&
-      c.price < b.price &&
-      b.price < dP;
-    if (!ok) return null;
-  }
-
-  const przLo = dP * 0.985;
-  const przHi = dP * 1.015;
-  const valid = checkProjValid(
-    candles,
-    c.index + 1,
-    bull,
-    x.price,
-    b.price,
-    c.price,
-    przLo,
-    przHi,
-    ext1618
-  );
-  if (!valid) return null;
-
-  const abB = Math.max(
-    3,
-    b.index - a.index
-  );
-  const tI = Math.max(
-    lastI + 1,
-    c.index + abB
-  );
-  const dDt = dateForIndex(
-    candles,
-    tI,
-    iv
-  );
-  return {
-    name: nm,
-    bull,
-    done: false,
-    nodes: [
-      { l: "X", ...x },
-      { l: "A", ...a },
-      { l: "B", ...b },
-      { l: "C", ...c },
-      {
-        l: "D",
-        index: tI,
-        price: dP,
-        date: dDt
-      }
-    ],
-    przLo,
-    przHi,
-    dDate: dDt
-  };
-}
-
-function detectHarmonic(
-  candles,
-  swings,
-  iv
-) {
-  const n = swings.length;
-  if (n < 4 || candles.length === 0) {
-    return null;
-  }
-  const lastI = candles.length - 1;
-  const maxS = Math.min(18, n - 4);
-  let fallback = null;
-
-  for (let s = 0; s <= maxS; s++) {
-    const endP = n - 1 - s;
-    const isBack = s > 0;
-    if (endP >= 4) {
-      const hit = evalXABCD(
-        swings[endP - 4],
-        swings[endP - 3],
-        swings[endP - 2],
-        swings[endP - 1],
-        swings[endP],
-        candles,
-        isBack
-      );
-      if (hit) {
-        if (hit.unb) return hit.pat;
-        if (!fallback) {
-          fallback = hit.pat;
-        }
-      }
-    }
-    if (s === 0) {
-      const proj = projXABC(
-        swings[n - 4],
-        swings[n - 3],
-        swings[n - 2],
-        swings[n - 1],
-        candles,
-        lastI,
-        iv
-      );
-      if (proj) return proj;
-    }
-  }
-  return fallback;
-}
-
-function runAnalysis() {
-  const cs = st.candles;
-  if (cs.length < 20) return;
-  const intra = isIntraday(
-    st.interval
-  );
-  const effMode = intra
-    ? "trading" : st.timeMode;
-  const swings = detectSwings(
-    cs,
-    st.interval
-  );
-  const mechSw = buildMechSwings(
-    cs,
-    2
-  );
-  const anc = pickAnchor(
-    cs,
-    swings,
-    st.customAnc,
-    st.dir
-  );
-  let isUp = !anc.isHigh;
-  if (st.dir === "up") isUp = true;
-  if (st.dir === "down") isUp = false;
-
-  const bVol = calcVol(
-    cs,
-    anc,
-    swings,
-    st.interval,
-    effMode
-  );
-  const vol = Math.max(
-    0.0001,
-    bVol * st.volMult
-  );
-  const lastI = cs.length - 1;
-  const endI = lastI + st.horizon;
-  const rays = buildRays(
-    cs,
-    anc,
-    isUp,
-    vol,
-    endI,
-    st.interval,
-    effMode
-  );
-  const hits = calcTimeHits(
-    cs,
-    anc,
-    swings,
-    vol,
-    st.horizon,
-    st.interval,
-    effMode
-  );
-  const fibs = calcFibs(cs, swings);
-  const pctObj = calcPctGrid(cs);
-  const pcts = pctObj.levels;
-  const gm = pctObj.gm;
-  const harm = detectHarmonic(
-    cs,
-    swings,
-    st.interval
-  );
-  const stpInfo = calcMechStop(
-    cs,
-    mechSw,
-    isUp,
-    st.interval
-  );
-  const obMsg = calcOverbalance(
-    cs,
-    swings,
-    isUp,
-    st.interval,
-    effMode
-  );
-  const volMsg = calcVolumeDiag(cs);
-  const dHint = calcDailyGuide(
-    st.dailyCandles,
-    st.interval,
-    isUp
-  );
-
-  const last = cs[lastI];
-  const meta = intvMeta(st.interval);
-  const sign = isUp ? 1 : -1;
-  const dtN = barTimeDelta(
-    cs,
-    anc.index,
-    last.id,
-    st.interval,
-    effMode
-  );
-  const p1 = Math.max(
-    0,
-    anc.price + sign * vol * dtN
-  );
-  const pos = last.close >= p1
-    ? "位於 1x1(45度) 強勢線上方"
-    : "處於 1x1(45度) 弱勢線下方";
-  const titleF = st.name
-    ? st.code + " " + st.name
-    : st.code;
-  const dirLbl = st.dir === "up"
-    ? "向上"
-    : (st.dir === "down"
-      ? "向下" : "自動");
-  const tTag = intra
-    ? "交易K線連續"
-    : (effMode === "calendar"
-      ? "自然日" : "交易日");
-  const unit = (effMode === "calendar" &&
-    st.interval === "1d")
-    ? "自然日" : meta.u;
-
-  const lines = [];
-  lines.push("【江恩時空推演報告】");
-  lines.push("標的：" + titleF);
-  lines.push(
-    "維度：" + meta.t + "(" + tTag +
-    ") | 現價：" + fmt(last.close)
-  );
-  if (dHint) {
-    lines.push(
-      "多週期過濾：" + dHint
-    );
-  }
-  lines.push(
-    "起點：" +
-    fmtDate(anc.date, intra) +
-    " (" + fmt(anc.price) + ")"
-  );
-  lines.push(
-    "角度方向：" +
-    (isUp ? "上升" : "下跌") +
-    "江恩線(" + dirLbl + ")"
-  );
-  lines.push(
-    "獨立波動率：" + fmt(vol) +
-    "/" + unit
-  );
-  lines.push(
-    "1x1主線現值：" + fmt(p1)
-  );
-  lines.push("強弱診斷：" + pos);
-  lines.push("平衡超越：" + obMsg);
-  lines.push("量能結構：" + volMsg);
-  lines.push("");
-  lines.push(
-    intra
-      ? "【日內圓周與短線轉勢窗口】"
-      : "【大級別圓周與轉勢窗口】"
-  );
-
-  const majs = hits.filter(
-    h => h.isMajor
-  );
-  const showH = majs.length > 0
-    ? majs.slice(0, 3)
-    : hits.slice(0, 3);
-
-  if (showH.length === 0) {
-    lines.push(
-      "延伸期內暫無重大轉勢共振"
-    );
-  } else {
-    for (const h of showH) {
-      const dtF = barTimeDelta(
-        cs,
-        anc.index,
-        h.targetIndex,
-        st.interval,
-        effMode
-      );
-      const t1 = Math.max(
-        0,
-        anc.price + sign * vol * dtF
-      );
-      const t2 = Math.max(
-        0,
-        anc.price +
-          sign * vol * 2 * dtF
-      );
-      const t3 = Math.max(
-        0,
-        anc.price +
-          sign * vol * 0.5 * dtF
-      );
-      const tag = h.isMajor
-        ? "★核心轉折："
-        : "轉勢窗：";
-      lines.push(
-        tag +
-        fmtDate(h.estDate, intra)
-      );
-      lines.push(
-        "共振因數：" +
-        h.reasons.join("+")
-      );
-      lines.push(
-        "屆時1x1目標價：" + fmt(t1)
-      );
-      lines.push(
-        "強弱區間：" + fmt(t3) +
-        " ~ " + fmt(t2)
-      );
-    }
-  }
-
-  lines.push("");
-  lines.push(
-    "【江恩八分位與幾何中項】"
-  );
-  for (const p of pcts) {
-    if (p.isMajor) {
-      lines.push(
-        p.label + "：" + fmt(p.price)
-      );
-    }
-  }
-  lines.push(
-    "幾何和諧中項√(H×L)：" +
-    fmt(gm)
-  );
-
-  lines.push("");
-  lines.push("【黃金比率匯聚位】");
-  const confs = fibs.filter(
-    f => f.isConf
-  );
-  const showF = confs.length > 0
-    ? confs : fibs.slice(0, 3);
-  for (const f of showF) {
-    const tg = f.isConf
-      ? " (雙重匯聚)" : "";
-    lines.push(
-      f.label + "：" +
-      fmt(f.price) + tg
-    );
-  }
-
-  lines.push("");
-  lines.push("【和諧形態掃描】");
-  if (harm) {
-    const stTxt = harm.done
-      ? "已成型反轉" : "推演完成中";
-    lines.push(
-      "形態：" + harm.name +
-      "(" + stTxt + ")"
-    );
-    lines.push(
-      "D點轉勢窗口：" +
-      fmtDate(harm.dDate, intra)
-    );
-    lines.push(
-      "目標反轉區：" +
-      fmt(harm.przLo) + " ~ " +
-      fmt(harm.przHi)
-    );
-  } else {
-    lines.push(
-      "當前處於單邊趨勢延伸中，" +
-      "暫無有效" + meta.t +
-      "和諧形態"
-    );
-  }
-
-  lines.push("");
-  lines.push("【江恩機械擺動風控】");
-  lines.push(
-    "動態機械止損：" + fmt(stpInfo.p)
-  );
-  lines.push(
-    "止損依據：" + stpInfo.why
-  );
-  lines.push(
-    intra
-      ? "短線鐵則：嚴禁過度交易，" +
-        "單筆風險控管於2%~5%內"
-      : "資金控管：單筆不超總資金10%"
-  );
-
-  st.res = {
-    anc,
-    isUp,
-    vol,
-    effMode,
-    rays,
-    hits,
-    fibs,
-    pcts,
-    harm,
-    mechSw,
-    dHint,
-    report: lines.join("\n")
-  };
-  updateCards();
-  drawChart();
-}
-
-function updateCards() {
-  const r = st.res;
-  if (!r) return;
-  const intra = isIntraday(
-    st.interval
-  );
-  document.getElementById(
-    "turnCardTitle"
-  ).textContent = intra
-    ? "日內圓周與短線轉勢窗口"
-    : "大級別圓周與轉勢窗口";
-
-  const dhEl = document.getElementById(
-    "dailyHintBadge"
-  );
-  if (r.dHint) {
-    dhEl.textContent = r.dHint;
-    dhEl.style.display = "block";
-  } else {
-    dhEl.style.display = "none";
-  }
-
-  const titleF = st.name
-    ? st.code + " " + st.name
-    : st.code;
-  document.getElementById(
-    "repTitle"
-  ).textContent =
-    titleF + " 江恩策略建議";
-  document.getElementById(
-    "repBody"
-  ).textContent = r.report;
-
-  const maj = r.hits.find(
-    h => h.isMajor
-  );
-  const hit = maj || r.hits[0];
-  const badge = document.getElementById(
-    "turnBadge"
-  );
-  if (hit) {
-    badge.style.display =
-      hit.isMajor ? "block" : "none";
-    document.getElementById(
-      "turnDate"
-    ).textContent =
-      "預計時間：" +
-      fmtDate(hit.estDate, intra);
-    document.getElementById(
-      "turnWhy"
-    ).textContent =
-      "共振原因：" +
-      hit.reasons.join(" + ");
-    const dt = barTimeDelta(
-      st.candles,
-      r.anc.index,
-      hit.targetIndex,
-      st.interval,
-      r.effMode
-    );
-    const s = r.isUp ? 1 : -1;
-    const p1 = Math.max(
-      0,
-      r.anc.price + s * r.vol * dt
-    );
-    document.getElementById(
-      "turnPrice"
-    ).textContent =
-      "屆時 1x1 目標價：" + fmt(p1);
-  } else {
-    badge.style.display = "none";
-    document.getElementById(
-      "turnDate"
-    ).textContent = "暫無強共振";
-    document.getElementById(
-      "turnWhy"
-    ).textContent =
-      "可拉長上方延伸期數觀察";
-    document.getElementById(
-      "turnPrice"
-    ).textContent = "--";
-  }
-
-  const hBadge = document.getElementById(
-    "harmBadge"
-  );
-  if (r.harm) {
-    const isBk = r.harm.name
-      .includes("回溯");
-    hBadge.style.display =
-      isBk ? "block" : "none";
-    document.getElementById(
-      "harmName"
-    ).textContent =
-      "形態：" + r.harm.name;
-    document.getElementById(
-      "harmDate"
-    ).textContent =
-      "D點時間窗口：" +
-      fmtDate(r.harm.dDate, intra);
-    document.getElementById(
-      "harmPrz"
-    ).textContent =
-      "反轉目標區：" +
-      fmt(r.harm.przLo) + " ~ " +
-      fmt(r.harm.przHi);
-  } else {
-    hBadge.style.display = "none";
-    const meta = intvMeta(st.interval);
-    const fb = st.interval === "1d"
-      ? "當前處於單邊趨勢延伸中，" +
-        "暫無有效日線和諧形態" +
-        "（建議切換週線或小時圖檢視）"
-      : "當前處於單邊趨勢延伸中，" +
-        "暫無有效" + meta.t +
-        "和諧形態（建議切換其他週期）";
-    document.getElementById(
-      "harmName"
-    ).textContent = fb;
-    document.getElementById(
-      "harmDate"
-    ).textContent = "--";
-    document.getElementById(
-      "harmPrz"
-    ).textContent = "--";
-  }
-}
-
-function focusHarmonic() {
-  const h = st.res?.harm;
-  if (!h || !h.nodes?.length) return;
-  const xI = h.nodes[0].index;
-  const dI = h.nodes[4].index;
-  const span = Math.max(10, dI - xI);
-  if (span + 24 > st.histBars) {
-    st.histBars = Math.min(
-      360,
-      span + 30
-    );
-    savePrefs();
-  }
-  const mid = Math.floor(
-    (xI + dI) / 2
-  );
-  const lastH = Math.max(
-    0,
-    st.candles.length - 1
-  );
-  const maxE = lastH + st.horizon;
-  const winL =
-    st.histBars + st.horizon;
-  const desEnd =
-    mid + Math.floor(winL / 2);
-  const lim = maxPanLimit();
-  st.panOff = Math.max(
-    0,
-    Math.min(lim, maxE - desEnd)
-  );
-  if (dI >= 0 && dI <= maxE) {
-    st.selBar = dI;
-  }
-  drawChart();
-}
-
-function maxPanLimit() {
-  const lastH = Math.max(
-    0,
-    st.candles.length - 1
-  );
-  const maxE = lastH + st.horizon;
-  const winL =
-    st.histBars + st.horizon;
-  return Math.max(0, maxE - winL);
-}
-
-function panBackward(step) {
-  const lim = maxPanLimit();
-  st.panOff = Math.min(
-    lim,
-    st.panOff + step
-  );
-}
-
-function panForward(step) {
-  st.panOff = Math.max(
-    0,
-    st.panOff - step
-  );
-}
-
-function getVisRange() {
-  const lastH = Math.max(
-    0,
-    st.candles.length - 1
-  );
-  const maxE = lastH + st.horizon;
-  const winL =
-    st.histBars + st.horizon;
-  const endB = Math.max(
-    Math.min(maxE, winL),
-    maxE - st.panOff
-  );
-  const startB = Math.max(
-    0,
-    endB - winL
-  );
-  const endH = Math.min(
-    endB,
-    lastH
-  );
-  return { startB, endH, endB };
-}
-
-function ensureVisible(bar) {
-  const maxP = maxPanLimit();
-  const { startB, endB } = getVisRange();
-  if (bar < startB) {
-    st.panOff = Math.min(
-      maxP,
-      st.panOff + (startB - bar)
-    );
-  } else if (bar > endB) {
-    st.panOff = Math.max(
-      0,
-      st.panOff - (bar - endB)
-    );
-  }
-}
-
-function stepBar(delta) {
-  if (st.candles.length === 0) return;
-  const lastH = st.candles.length - 1;
-  const maxE = lastH + st.horizon;
-  const cur = st.selBar ?? lastH;
-  const next = Math.max(
-    0,
-    Math.min(maxE, cur + delta)
-  );
-  st.selBar = next;
-  ensureVisible(next);
-  drawChart();
-}
-
-function drawChart() {
-  const cv =
-    document.getElementById("cv");
-  const wrap =
-    document.getElementById("cWrap");
-  const dpr =
-    window.devicePixelRatio || 1;
-  const w = wrap.clientWidth;
-  const h = wrap.clientHeight;
-  if (w <= 0 || h <= 0) return;
-  cv.width = w * dpr;
-  cv.height = h * dpr;
-  const ctx = cv.getContext("2d");
-  ctx.scale(dpr, dpr);
-
-  ctx.fillStyle = "#0e1118";
-  ctx.fillRect(0, 0, w, h);
-
-  const cs = st.candles;
-  if (cs.length === 0) return;
-  const {
-    startB,
-    endH,
-    endB
-  } = getVisRange();
-  const lastH = cs.length - 1;
-  const rightW = 58;
-  const botH = 30;
-  const plotW = Math.max(
-    1,
-    w - rightW
-  );
-  const plotH = Math.max(
-    1,
-    h - botH
-  );
-
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (let i = startB; i <= endH; i++) {
-    lo = Math.min(lo, cs[i].low);
-    hi = Math.max(hi, cs[i].high);
-  }
-  const r = st.res;
-  if (st.panOff === 0 && r) {
-    const r1 = r.rays.find(
-      x => x.isPrimary
-    );
-    const lp = r1?.pts[
-      r1.pts.length - 1
-    ];
-    if (lp) {
-      const p = lp.price;
-      if (p > 0 && p < hi * 2.2) {
-        hi = Math.max(hi, p);
-        lo = Math.min(lo, p);
-      }
-    }
-  }
-  if (st.showHarm && r?.harm) {
-    const ns = r.harm.nodes;
-    const xI = ns[0].index;
-    const dI = ns[4].index;
-    if (dI >= startB && xI <= endB) {
-      for (const nd of ns) {
-        lo = Math.min(lo, nd.price);
-        hi = Math.max(hi, nd.price);
-      }
-      lo = Math.min(lo, r.harm.przLo);
-      hi = Math.max(hi, r.harm.przHi);
-    }
-  }
-  if (hi <= lo) hi = lo + 1;
-  const pad = (hi - lo) * 0.08;
-  const minP = Math.max(0, lo - pad);
-  const maxP = hi + pad;
-
-  const spanX = Math.max(
-    1,
-    endB - startB
-  );
-  const xOf = b =>
-    ((b - startB) / spanX) *
-      (plotW - 12) + 6;
-  const yOf = p =>
-    plotH -
-      ((p - minP) / (maxP - minP)) *
-      (plotH - 16) - 8;
-
-  ctx.font = "10px sans-serif";
-  ctx.strokeStyle =
-    "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 0.7;
-
-  for (let i = 0; i <= 4; i++) {
-    const rt = i / 4;
-    const p = minP +
-      (maxP - minP) * rt;
-    const y = plotH -
-      rt * (plotH - 16) - 8;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(plotW, y);
-    ctx.stroke();
-    ctx.fillStyle = "#94a3b8";
-    ctx.fillText(
-      fmtAxisP(p),
-      plotW + 6,
-      y + 3
-    );
-  }
-
-  for (let i = 0; i <= 4; i++) {
-    const bar = Math.round(
-      startB + (spanX * i) / 4
-    );
-    const x = xOf(bar);
-    if (i > 0 && i < 4) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, plotH);
-      ctx.stroke();
-    }
-    if (x >= 18 && x <= plotW - 18) {
-      ctx.fillStyle = "#94a3b8";
-      const dl = shortDateAtBar(bar);
-      ctx.fillText(
-        dl,
-        x - 16,
-        plotH + 19
-      );
-    }
-  }
-
-  ctx.strokeStyle =
-    "rgba(255,255,255,0.22)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, plotH);
-  ctx.lineTo(plotW, plotH);
-  ctx.moveTo(plotW, 0);
-  ctx.lineTo(plotW, plotH);
-  ctx.stroke();
-
-  if (lastH >= startB &&
-    lastH <= endB) {
-    const xN = xOf(lastH);
-    ctx.fillStyle =
-      "rgba(59,130,246,0.08)";
-    ctx.fillRect(
-      xN,
-      0,
-      plotW - xN,
-      plotH
-    );
-    ctx.save();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle =
-      "rgba(255,255,255,0.35)";
-    ctx.beginPath();
-    ctx.moveTo(xN, 0);
-    ctx.lineTo(xN, plotH);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  if (r && st.showGrid) {
-    for (const lv of r.pcts) {
-      if (lv.price < minP ||
-        lv.price > maxP) continue;
-      const y = yOf(lv.price);
-      const is50 =
-        Math.abs(lv.ratio - 0.5) < 0.01;
-      ctx.save();
-      ctx.setLineDash(
-        is50 ? [6, 3] : [2, 4]
-      );
-      ctx.strokeStyle = is50
-        ? "rgba(250,204,21,0.6)"
-        : (lv.isMajor
-          ? "rgba(99,102,241,0.45)"
-          : "rgba(99,102,241,0.22)");
-      ctx.lineWidth = is50 ? 1.4 : 0.8;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(plotW, y);
-      ctx.stroke();
-      ctx.restore();
-      if (lv.isMajor) {
-        ctx.fillStyle = is50
-          ? "#facc15" : "#818cf8";
-        ctx.fillText(
-          lv.label,
-          8,
-          y - 3
-        );
-      }
-    }
-  }
-
-  if (r && st.showFib) {
-    for (const f of r.fibs) {
-      if (f.price < minP ||
-        f.price > maxP) continue;
-      const y = yOf(f.price);
-      ctx.save();
-      ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = f.isConf
-        ? "rgba(192,132,252,0.8)"
-        : "rgba(148,163,184,0.3)";
-      ctx.lineWidth =
-        f.isConf ? 1.5 : 0.8;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(plotW, y);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  if (r) {
-    const intra = isIntraday(
-      st.interval
-    );
-    for (const hit of r.hits) {
-      const ti = hit.targetIndex;
-      if (ti < startB || ti > endB) {
-        continue;
-      }
-      const x = xOf(ti);
-      const mj = hit.isMajor;
-      const stg = hit.strength >= 2;
-      const col = mj
-        ? "#f472b6"
-        : (stg ? "#fb923c" : "#facc15");
-      ctx.save();
-      if (!mj) ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = col;
-      ctx.lineWidth = mj ? 2 : 1.2;
-      ctx.beginPath();
-      ctx.moveTo(x, 16);
-      ctx.lineTo(x, plotH);
-      ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = col;
-      const tg = mj
-        ? (intra ? "◎共振" : "◎大周期")
-        : (stg ? "★轉勢" : "轉");
-      ctx.fillText(tg, x - 12, 11);
-    }
-  }
-
-  if (r && st.showHarm && r.harm) {
-    const ns = r.harm.nodes;
-    const pts = ns.map(n => ({
-      x: xOf(n.index),
-      y: yOf(n.price),
-      l: n.l,
-      idx: n.index
-    }));
-    const col = r.harm.bull
-      ? "#34d399" : "#f472b6";
-    ctx.fillStyle = r.harm.bull
-      ? "rgba(52,211,153,0.15)"
-      : "rgba(244,114,182,0.15)";
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    ctx.lineTo(pts[1].x, pts[1].y);
-    ctx.lineTo(pts[2].x, pts[2].y);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(pts[2].x, pts[2].y);
-    ctx.lineTo(pts[3].x, pts[3].y);
-    ctx.lineTo(pts[4].x, pts[4].y);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.save();
-    if (!r.harm.done) {
-      ctx.setLineDash([4, 3]);
-    }
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < 5; i++) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.fillStyle = col;
-    for (const p of pts) {
-      if (p.idx >= startB &&
-        p.idx <= endB) {
-        ctx.fillText(
-          p.l,
-          p.x - 4,
-          p.y - 6
-        );
-      }
-    }
-  }
-
-  if (r && st.showSwing &&
-    r.mechSw.length >= 2) {
-    ctx.save();
-    ctx.strokeStyle =
-      "rgba(250,204,21,0.85)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (
-      let i = 0;
-      i < r.mechSw.length;
-      i++
-    ) {
-      const s = r.mechSw[i];
-      const x = xOf(s.index);
-      const y = yOf(s.price);
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
-    for (const s of r.mechSw) {
-      if (s.index >= startB &&
-        s.index <= endB) {
-        const x = xOf(s.index);
-        const y = yOf(s.price);
-        ctx.fillStyle = s.isHigh
-          ? "#fb923c" : "#34d399";
-        ctx.beginPath();
-        ctx.arc(
-          x,
-          y,
-          3,
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
-      }
-    }
-    ctx.restore();
-  }
-
-  if (r) {
-    for (const ray of r.rays) {
-      if (ray.pts.length < 2) continue;
-      const is1 = ray.isPrimary;
-      const is2 =
-        ray.name === "2x1" ||
-        ray.name === "1x2";
-      const col = is1
-        ? "#facc15"
-        : (is2
-          ? "rgba(56,189,248,0.75)"
-          : "rgba(45,212,191,0.32)");
-      ctx.strokeStyle = col;
-      ctx.lineWidth = is1 ? 2 : 1;
-      ctx.beginPath();
-      for (
-        let i = 0;
-        i < ray.pts.length;
-        i++
-      ) {
-        const pt = ray.pts[i];
-        const x = xOf(pt.bar);
-        const y = yOf(pt.price);
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.stroke();
-
-      const pEnd =
-        ray.pts[ray.pts.length - 1];
-      if (pEnd.price >= minP &&
-        pEnd.price <= maxP &&
-        pEnd.bar <= endB) {
-        const y1 = yOf(pEnd.price);
-        ctx.fillStyle = col;
-        ctx.fillText(
-          ray.name,
-          plotW - 22,
-          y1 - 3
-        );
-      }
-    }
-  }
-
-  const drawE = Math.min(endB, lastH);
-  const bW = Math.max(
-    2,
-    Math.min(11, (plotW / spanX) * 0.65)
-  );
-  if (st.style === "line") {
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    for (
-      let i = startB;
-      i <= drawE;
-      i++
-    ) {
-      const x = xOf(i);
-      const y = yOf(cs[i].close);
-      if (i === startB) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
-  } else {
-    for (
-      let i = startB;
-      i <= drawE;
-      i++
-    ) {
-      const c = cs[i];
-      const x = xOf(i);
-      const yH = yForPrice(
-        c.high,
-        plotH,
-        minP,
-        maxP
-      );
-      const yL = yForPrice(
-        c.low,
-        plotH,
-        minP,
-        maxP
-      );
-      const yO = yForPrice(
-        c.open,
-        plotH,
-        minP,
-        maxP
-      );
-      const yC = yForPrice(
-        c.close,
-        plotH,
-        minP,
-        maxP
-      );
-      const up = c.close >= c.open;
-      const col = up
-        ? "#22c55e" : "#ef4444";
-      ctx.strokeStyle = col;
-      ctx.fillStyle = col;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, yH);
-      ctx.lineTo(x, yL);
-      ctx.stroke();
-      const topY = Math.min(yO, yC);
-      const bh = Math.max(
-        1.5,
-        Math.abs(yC - yO)
-      );
-      ctx.fillRect(
-        x - bW / 2,
-        topY,
-        bW,
-        bh
-      );
-    }
-  }
-
-  if (r &&
-    r.anc.index >= startB &&
-    r.anc.index <= endB) {
-    const ax = xOf(r.anc.index);
-    const ay = yOf(r.anc.price);
-    ctx.fillStyle = "#facc15";
-    ctx.beginPath();
-    ctx.arc(ax, ay, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillText(
-      "起點",
-      ax - 10,
-      ay + 15
-    );
-  }
-
-  const rawAct = st.selBar ?? lastH;
-  const actBar = Math.max(
-    startB,
-    Math.min(endB, rawAct)
-  );
-  const actX = xOf(actBar);
-  const actP = priceAtBar(actBar);
-  const actY = yOf(actP);
-  const isFut = actBar > lastH;
-  const pillBg = isFut
-    ? "#fb923c" : "#22d3ee";
-
-  ctx.strokeStyle = pillBg;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(actX, 0);
-  ctx.lineTo(actX, plotH);
-  ctx.stroke();
-
-  if (actP >= minP && actP <= maxP) {
-    ctx.save();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = isFut
-      ? "rgba(251,146,60,0.6)"
-      : "rgba(34,211,238,0.6)";
-    ctx.beginPath();
-    ctx.moveTo(0, actY);
-    ctx.lineTo(plotW, actY);
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.fillStyle = pillBg;
-    ctx.beginPath();
-    ctx.arc(
-      actX,
-      actY,
-      4,
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
-
-    const py = Math.max(
-      2,
-      Math.min(plotH - 20, actY - 9)
-    );
-    fillPill(
-      ctx,
-      plotW + 3,
-      py,
-      rightW - 6,
-      18,
-      4
-    );
-    ctx.fillStyle = "#090b10";
-    ctx.font =
-      "bold 10px sans-serif";
-    ctx.fillText(
-      fmtAxisP(actP),
-      plotW + 6,
-      py + 12
-    );
-  }
-
-  const dStr = fullDateAtBar(actBar);
-  const hw = 132;
-  const btnW = 26;
-  const hx = Math.max(
-    4,
-    Math.min(
-      plotW - hw - 4,
-      actX - hw / 2
-    )
-  );
-  const hy = plotH + 3;
-  const hh = 22;
-
-  ctx.fillStyle = pillBg;
-  fillPill(ctx, hx, hy, hw, hh, 6);
-
-  ctx.strokeStyle =
-    "rgba(9,11,16,0.28)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(hx + btnW, hy + 3);
-  ctx.lineTo(hx + btnW, hy + hh - 3);
-  ctx.moveTo(
-    hx + hw - btnW,
-    hy + 3
-  );
-  ctx.lineTo(
-    hx + hw - btnW,
-    hy + hh - 3
-  );
-  ctx.stroke();
-
-  ctx.fillStyle = "#090b10";
-  ctx.font = "bold 11px sans-serif";
-  ctx.fillText("◀", hx + 7, hy + 15);
-  ctx.fillText(
-    "▶",
-    hx + hw - 18,
-    hy + 15
-  );
-  ctx.font = "bold 10px sans-serif";
-  ctx.fillText(
-    dStr,
-    hx + btnW + 7,
-    hy + 15
-  );
-
-  st.pillBox = {
-    x: hx,
-    y: hy,
-    w: hw,
-    h: hh,
-    btnW
-  };
-
-  updateHud();
-}
-
-function yForPrice(
-  p,
-  plotH,
-  minP,
-  maxP
-) {
-  return plotH -
-    ((p - minP) / (maxP - minP)) *
-    (plotH - 16) - 8;
-}
-
-function updateHud() {
-  const cs = st.candles;
-  if (cs.length === 0) return;
-  const lastI = cs.length - 1;
-  const idx = st.selBar ?? lastI;
-  const meta = intvMeta(st.interval);
-  const dStr = fullDateAtBar(idx);
-  let pStr = "";
-  if (idx >= 0 && idx <= lastI) {
-    const c = cs[idx];
-    pStr = "收 " + fmt(c.close);
-  } else {
-    const diff = idx - lastI;
-    pStr = "未來+" + diff + meta.u;
-  }
-  let gStr = "";
-  if (st.res) {
-    const r = st.res;
-    const dt = barTimeDelta(
-      cs,
-      r.anc.index,
-      idx,
-      st.interval,
-      r.effMode
-    );
-    const s = r.isUp ? 1 : -1;
-    const p1 = Math.max(
-      0,
-      r.anc.price + s * r.vol * dt
-    );
-    gStr = " | 1x1:" + fmt(p1);
-  }
-  const nm = st.name
-    ? st.name + " " : "";
-  document.getElementById(
-    "hudTxt"
-  ).textContent =
-    nm + dStr + " " + pStr + gStr;
-
-  const {
-    startB,
-    endB
-  } = getVisRange();
-  const bLoc = document.getElementById(
-    "btnLocHarm"
-  );
-  const hm = st.res?.harm;
-  if (st.showHarm && hm) {
-    const xI = hm.nodes[0].index;
-    const dI = hm.nodes[4].index;
-    const outV =
-      xI < startB || dI > endB;
-    const isBk =
-      hm.name.includes("回溯");
-    bLoc.style.display =
-      (outV || isBk)
-      ? "inline-block" : "none";
-  } else {
-    bLoc.style.display = "none";
-  }
-
-  const bBack = document.getElementById(
-    "btnHistBack"
-  );
-  bBack.style.display =
-    startB > 0 ? "inline-block" : "none";
-
-  const bFwd = document.getElementById(
-    "btnHistFwd"
-  );
-  bFwd.style.display =
-    st.panOff > 0 ? "inline-block" : "none";
-
-  const bLat = document.getElementById(
-    "btnLatest"
-  );
-  bLat.style.display =
-    st.panOff > 0 ? "inline-block" : "none";
-
-  const bAnc = document.getElementById(
-    "btnSetAnc"
-  );
-  const validAnc =
-    st.selBar != null &&
-    st.selBar >= 0 &&
-    st.selBar <= lastI;
-  bAnc.style.display =
-    validAnc ? "inline-block" : "none";
-}
-
-function fillPresets() {
-  const sel = document.getElementById(
-    "presetSel"
-  );
-  const cnt = st.saved.length;
-  const ph = cnt > 0
-    ? "自選紀錄 (" + cnt + ")"
-    : "暫無自選紀錄";
-  sel.innerHTML =
-    '<option value="">' +
-    ph + "</option>";
-  for (const p of st.saved) {
-    const opt =
-      document.createElement("option");
-    opt.value = p.s;
-    const tag = p.m === "hk"
-      ? "[港] " : "[美] ";
-    opt.textContent =
-      tag + p.s + " " + p.n;
-    if (p.s === st.code) {
-      opt.selected = true;
-    }
-    sel.appendChild(opt);
-  }
-}
-
-async function loadSymbol() {
-  const myReq = ++st.reqId;
-  const ld =
-    document.getElementById("loadBox");
-  const eb =
-    document.getElementById("errBox");
-  const stag =
-    document.getElementById("srcTag");
-  document.getElementById(
-    "acBox"
-  ).style.display = "none";
-  ld.style.display = "flex";
-  eb.style.display = "none";
-  eb.classList.remove("warn");
-
-  const raw = document.getElementById(
-    "codeInp"
-  ).value;
-  const sym = normSym(
-    raw,
-    st.market
-  );
-  document.getElementById(
-    "codeInp"
-  ).value = sym;
-
+async function pollWebAlerts() {
+  const active = st.alerts.filter(
+    a => a.isEnabled && !a.isTriggered
+  );
+  if (active.length === 0) return;
   try {
-    const data = await fetchYahoo(
-      sym,
-      st.interval
+    await syncAlertsCloud();
+    const r = await fetch(
+      "/.netlify/functions/yahoo" +
+      "?action=check_alerts"
     );
-    if (myReq !== st.reqId) return;
-    st.code = sym;
-    st.name = data.name ||
-      NAMES[sym] || "";
-    st.customAnc = null;
-    st.selBar = null;
-    st.panOff = 0;
-    st.candles = data.candles;
-    if (st.interval === "1d") {
-      st.dailyCandles = data.candles;
-    } else if (
-      isIntraday(st.interval)
-    ) {
-      try {
-        const dRes = await fetchYahoo(
-          sym,
-          "1d"
-        );
-        if (myReq !== st.reqId) return;
-        st.dailyCandles = dRes.candles;
-      } catch (e) {}
+    if (!r.ok) return;
+    const j = await r.json();
+    if (Array.isArray(j.triggered) &&
+      j.triggered.length > 0) {
+      const hit = j.triggered[0];
+      if (Array.isArray(j.alerts)) {
+        st.alerts = j.alerts;
+        syncAlertsCloud();
+      }
+      document.getElementById(
+        "trigSym"
+      ).textContent =
+        hit.symbol + " " + hit.name;
+      document.getElementById(
+        "trigDetail"
+      ).textContent =
+        "已" + hit.condition + " " +
+        fmt(hit.targetPrice) +
+        "（觸發價：" +
+        fmt(hit.triggeredPrice) +
+        "）";
+      document.getElementById(
+        "trigPlan"
+      ).textContent = hit.planNote;
+      document.getElementById(
+        "trigModal"
+      ).style.display = "flex";
+      startWebRingLoop();
     }
-    stag.textContent =
-      data.source || "已連線";
-    if (st.candles.length > 0) {
-      recordSaved(
-        sym,
-        st.name,
-        st.market
-      );
-      savePrefs();
-    }
-    if (data.isCache) {
-      eb.textContent =
-        "即時數據暫時繁忙，已載入" +
-        "本地快取走勢：" + sym;
-      eb.classList.add("warn");
-      eb.style.display = "block";
-    }
-    runAnalysis();
-  } catch (e) {
-    if (myReq !== st.reqId) return;
-    stag.textContent = "連線受阻";
-    eb.textContent =
-      "所有備援線路均繁忙，請稍後" +
-      "再試或檢查代碼：" + sym;
-    eb.style.display = "block";
-  }
-  if (myReq === st.reqId) {
-    ld.style.display = "none";
-  }
-}
-
-function bindSeg(id, cb) {
-  const box =
-    document.getElementById(id);
-  const btns =
-    box.querySelectorAll("button");
-  btns.forEach(b => {
-    b.onclick = () => {
-      btns.forEach(x =>
-        x.classList.remove("on")
-      );
-      b.classList.add("on");
-      cb(b.dataset.v);
-    };
-  });
-}
-
-function setSegVal(id, val) {
-  const box =
-    document.getElementById(id);
-  box.querySelectorAll("button")
-    .forEach(b => {
-      b.classList.toggle(
-        "on",
-        b.dataset.v === String(val)
-      );
-    });
+  } catch (e) {}
 }
 
 function initEvents() {
@@ -4565,6 +1446,80 @@ function initEvents() {
   document.getElementById(
     "btnGo"
   ).onclick = loadSymbol;
+
+  document.getElementById(
+    "btnAlerts"
+  ).onclick = () => {
+    playWebAlarm();
+    openAlertModal();
+  };
+
+  document.getElementById(
+    "btnCloseAlert"
+  ).onclick = () => {
+    document.getElementById(
+      "alertModal"
+    ).style.display = "none";
+  };
+
+  document.getElementById(
+    "btnTestRing"
+  ).onclick = playWebAlarm;
+
+  document.getElementById(
+    "btnSaveBark"
+  ).onclick = () => {
+    st.barkKey = document
+      .getElementById("barkKeyInp")
+      .value.trim();
+    syncAlertsCloud();
+  };
+
+  document.getElementById(
+    "btnAddAlert"
+  ).onclick = () => {
+    const val = parseFloat(
+      document.getElementById(
+        "alTargetInp"
+      ).value
+    );
+    if (isNaN(val) || val <= 0) {
+      return;
+    }
+    const cond = document
+      .getElementById("alCondSel")
+      .value;
+    const note = document
+      .getElementById("alNoteInp")
+      .value.trim();
+    st.alerts.unshift({
+      id: String(Date.now()),
+      symbol: st.code,
+      name: st.name || st.code,
+      market: st.market,
+      targetPrice: val,
+      condition: cond,
+      planNote: note ||
+        "執行既定江恩轉勢交易計劃",
+      isEnabled: true,
+      isTriggered: false
+    });
+    document.getElementById(
+      "alNoteInp"
+    ).value = "";
+    playWebAlarm();
+    syncAlertsCloud();
+    renderAlertList();
+  };
+
+  document.getElementById(
+    "btnAckTrig"
+  ).onclick = () => {
+    clearInterval(st.ringTimer);
+    document.getElementById(
+      "trigModal"
+    ).style.display = "none";
+  };
 
   const inp = document.getElementById(
     "codeInp"
@@ -4925,9 +1880,11 @@ function initEvents() {
 }
 
 restoreState();
+loadAlertsLocal();
 fillPresets();
 initEvents();
 loadSymbol();
+setInterval(pollWebAlerts, 45000);
 </script>
 </body>
 </html>
