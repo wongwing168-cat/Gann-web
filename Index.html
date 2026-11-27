@@ -801,7 +801,8 @@ canvas {
         id="trigPlan"
         style="font-size:14px;
         font-weight:600;
-        margin-top:4px">--</div>
+        margin-top:4px;
+        white-space:pre-wrap">--</div>
     </div>
     <button
       class="btn btn-hi"
@@ -1087,22 +1088,15 @@ const st = {
   alerts: [],
   barkKey: "",
   ringTone: "alarm",
-  ringTimer: null
+  ringTimer: null,
+  audioCtx: null,
+  bgWorker: null
 };
 
 function isIntraIv(iv) {
-  return (
-    iv === "15m" ||
+  return iv === "15m" ||
     iv === "30m" ||
-    iv === "60m"
-  );
-}
-
-function barMins(iv) {
-  if (iv === "15m") return 15;
-  if (iv === "30m") return 30;
-  if (iv === "60m") return 60;
-  return 1440;
+    iv === "60m";
 }
 
 function ivTitle(iv) {
@@ -1114,127 +1108,47 @@ function ivTitle(iv) {
   return "月線";
 }
 
-function approxDays(iv) {
-  if (iv === "15m") return 0.036;
-  if (iv === "30m") return 0.072;
-  if (iv === "60m") return 0.145;
-  if (iv === "1d") return 1.45;
-  if (iv === "1wk") return 7.0;
-  return 30.44;
-}
-
-function unitName(iv) {
+function unitNameOf(iv, tm) {
   if (iv === "15m") return "期(15m)";
   if (iv === "30m") return "期(30m)";
   if (iv === "60m") return "小時";
-  if (iv === "1d") return "日";
+  if (iv === "1mo") return "月";
   if (iv === "1wk") return "週";
-  return "月";
+  return tm === "calendar"
+    ? "自然日" : "日";
 }
 
-function fmt(v) {
-  return Number(v).toFixed(2);
-}
-
-function fmtAxis(p) {
-  if (p >= 10000) return p.toFixed(0);
-  if (p >= 1000) return p.toFixed(1);
-  return p.toFixed(2);
-}
-
-function fmtDate(ms, withTime) {
-  const d = new Date(ms);
-  const y = d.getUTCFullYear();
-  const m = String(
-    d.getUTCMonth() + 1
-  ).padStart(2, "0");
-  const day = String(
-    d.getUTCDate()
-  ).padStart(2, "0");
-  if (!withTime) {
-    return y + "-" + m + "-" + day;
-  }
-  const hh = String(
-    d.getUTCHours()
-  ).padStart(2, "0");
-  const mm = String(
-    d.getUTCMinutes()
-  ).padStart(2, "0");
-  return (
-    m + "-" + day + " " + hh + ":" + mm
-  );
-}
-
-function addTradingBarsMs(
-  baseMs,
-  bars,
-  iv
-) {
-  let cur = baseMs;
-  const mins = barMins(iv);
-  let left = Math.abs(bars);
-  const dir = bars >= 0 ? 1 : -1;
-  while (left > 0) {
-    cur += dir * mins * 60000;
-    const wd = new Date(cur)
-      .getUTCDay();
-    if (wd === 0 || wd === 6) {
-      continue;
-    }
-    left -= 1;
-  }
-  return cur;
-}
-
-function dateMsForIndex(
-  cs,
-  idx,
-  iv
-) {
-  if (!cs.length) return Date.now();
-  const lastI = cs.length - 1;
-  if (idx >= 0 && idx <= lastI) {
-    return cs[idx].date;
-  }
-  const diff = idx - lastI;
-  if (isIntraIv(iv)) {
-    return addTradingBarsMs(
-      cs[lastI].date,
-      diff,
-      iv
-    );
-  }
-  return (
-    cs[lastI].date +
-    diff * approxDays(iv) * 86400000
-  );
+function barMinsOf(iv) {
+  if (iv === "15m") return 15;
+  if (iv === "30m") return 30;
+  if (iv === "60m") return 60;
+  return 1440;
 }
 
 function barTimeDelta(
-  cs,
+  candles,
   fromIdx,
   toIdx,
   iv,
-  tMode
+  tm
 ) {
-  if (
-    isIntraIv(iv) ||
-    tMode === "trading"
-  ) {
+  if (isIntraIv(iv) ||
+    tm === "trading") {
     return toIdx - fromIdx;
   }
-  const d1 = dateMsForIndex(
-    cs,
+  const d1 = dateForIndex(
+    candles,
     fromIdx,
     iv
   );
-  const d2 = dateMsForIndex(
-    cs,
+  const d2 = dateForIndex(
+    candles,
     toIdx,
     iv
   );
   const calDays =
-    (d2 - d1) / 86400000;
+    (d2.getTime() - d1.getTime()) /
+    86400000;
   if (iv === "1d") return calDays;
   if (iv === "1wk") {
     return calDays / 7.0;
@@ -1242,128 +1156,211 @@ function barTimeDelta(
   return calDays / 30.4375;
 }
 
-function normalizeSym(raw, mkt) {
-  let c = raw
-    .trim()
-    .toUpperCase();
-  if (!c) {
-    return mkt === "hk"
-      ? "^HSI" : "^IXIC";
+function dateForIndex(
+  candles,
+  idx,
+  iv
+) {
+  if (!candles.length) {
+    return new Date();
   }
-  if (
-    c === "HSI" ||
-    c === "HSCE" ||
-    c === "IXIC" ||
-    c === "GSPC" ||
-    c === "DJI"
-  ) {
-    return "^" + c;
+  const lastI = candles.length - 1;
+  if (idx >= 0 && idx <= lastI) {
+    return candles[idx].date;
   }
-  if (c === "BRK.B") c = "BRK-B";
-  if (c === "BRK.A") c = "BRK-A";
-  if (
-    mkt === "hk" &&
-    !c.endsWith(".HK") &&
-    !c.startsWith("^")
-  ) {
-    const dig = c.replace(/\D/g, "");
-    if (dig) {
-      return (
-        dig.padStart(4, "0") + ".HK"
-      );
-    }
-  }
-  return c;
-}
-
-function resolveName(sym, apiName) {
-  if (NAMES[sym]) return NAMES[sym];
-  if (apiName) return apiName;
-  return "";
-}
-
-function setSegVal(id, val) {
-  const el =
-    document.getElementById(id);
-  if (!el) return;
-  for (const b of el.children) {
-    b.classList.toggle(
-      "on",
-      b.dataset.v === String(val)
+  const diff = idx - lastI;
+  if (isIntraIv(iv)) {
+    const mins = barMinsOf(iv);
+    let cur = new Date(
+      candles[lastI].date.getTime()
     );
+    let left = Math.abs(diff);
+    const dir = diff >= 0 ? 1 : -1;
+    while (left > 0) {
+      cur = new Date(
+        cur.getTime() +
+        dir * mins * 60000
+      );
+      const wd = cur.getDay();
+      if (wd === 0 || wd === 6) {
+        continue;
+      }
+      left -= 1;
+    }
+    return cur;
   }
-}
-
-function bindSeg(id, fn) {
-  const el =
-    document.getElementById(id);
-  if (!el) return;
-  for (const b of el.children) {
-    b.onclick = () => {
-      setSegVal(id, b.dataset.v);
-      fn(b.dataset.v);
-    };
-  }
-}
-
-function syncTimeModeVis() {
-  const tm = document.getElementById(
-    "tModeSeg"
+  const step = iv === "1mo"
+    ? 30.44
+    : (iv === "1wk" ? 7.0 : 1.45);
+  return addDays(
+    candles[lastI].date,
+    diff * step
   );
-  if (tm) {
-    tm.style.display = isIntraIv(
-      st.interval
-    )
-      ? "none" : "inline-flex";
+}
+
+function fmt(v) {
+  return Number(v).toFixed(2);
+}
+
+function fmtDate(d, withTime) {
+  const y = d.getFullYear();
+  const m = String(
+    d.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    d.getDate()
+  ).padStart(2, "0");
+  if (!withTime) {
+    return y + "-" + m + "-" + day;
   }
+  const hh = String(
+    d.getHours()
+  ).padStart(2, "0");
+  const mm = String(
+    d.getMinutes()
+  ).padStart(2, "0");
+  return m + "-" + day +
+    " " + hh + ":" + mm;
+}
+
+function addDays(d, days) {
+  return new Date(
+    d.getTime() + days * 86400000
+  );
+}
+
+function showMsg(txt, isWarn) {
+  const el = document.getElementById(
+    "errBox"
+  );
+  if (!txt) {
+    el.style.display = "none";
+    return;
+  }
+  el.textContent = txt;
+  el.className = isWarn
+    ? "err warn" : "err";
+  el.style.display = "block";
+}
+
+function syncControlsUI() {
+  setSegVal("mktSeg", st.market);
+  setSegVal("stySeg", st.style);
+  setSegVal("intSeg", st.interval);
+  setSegVal(
+    "horSeg",
+    String(st.horizon)
+  );
+  setSegVal("dirSeg", st.dir);
+  setSegVal(
+    "tModeSeg",
+    st.timeMode
+  );
+  document.getElementById(
+    "tModeSeg"
+  ).style.display = isIntraIv(
+    st.interval
+  ) ? "none" : "inline-flex";
+  document.getElementById(
+    "codeInp"
+  ).value = st.code;
+  document.getElementById(
+    "togSwing"
+  ).classList.toggle(
+    "on",
+    st.showSwing
+  );
+  document.getElementById(
+    "togGrid"
+  ).classList.toggle(
+    "on",
+    st.showGrid
+  );
+  document.getElementById(
+    "togFib"
+  ).classList.toggle(
+    "on",
+    st.showFib
+  );
+  document.getElementById(
+    "togHarm"
+  ).classList.toggle(
+    "on",
+    st.showHarm
+  );
+  document.getElementById(
+    "volLbl"
+  ).textContent =
+    "波動:" +
+    st.volMult.toFixed(1) + "x";
+}
+
+function savePrefs() {
+  try {
+    const obj = {
+      market: st.market,
+      code: st.code,
+      name: st.name,
+      style: st.style,
+      interval: st.interval,
+      horizon: st.horizon,
+      dir: st.dir,
+      timeMode: st.timeMode,
+      showSwing: st.showSwing,
+      showGrid: st.showGrid,
+      showFib: st.showFib,
+      showHarm: st.showHarm,
+      volMult: st.volMult,
+      histBars: st.histBars,
+      moveLine: st.moveLine
+    };
+    localStorage.setItem(
+      PREF_KEY,
+      JSON.stringify(obj)
+    );
+  } catch (e) {}
 }
 
 function restoreState() {
   try {
-    const sRaw =
-      localStorage.getItem(SAVED_KEY);
-    if (sRaw) {
-      st.saved = JSON.parse(sRaw);
+    const rawS = localStorage.getItem(
+      SAVED_KEY
+    );
+    if (rawS) {
+      st.saved = JSON.parse(rawS);
+    } else {
+      st.saved = [
+        {
+          s: "^HSI",
+          n: "恒生指數",
+          m: "hk"
+        },
+        {
+          s: "0700.HK",
+          n: "騰訊控股",
+          m: "hk"
+        },
+        {
+          s: "^IXIC",
+          n: "納斯達克指數",
+          m: "us"
+        },
+        {
+          s: "AAPL",
+          n: "蘋果公司",
+          m: "us"
+        }
+      ];
+      persistSaved();
     }
-  } catch (e) {}
-  if (!Array.isArray(st.saved) ||
-    st.saved.length === 0) {
-    st.saved = [
-      {
-        s: "^HSI",
-        n: "恒生指數",
-        m: "hk"
-      },
-      {
-        s: "0700.HK",
-        n: "騰訊控股",
-        m: "hk"
-      },
-      {
-        s: "^IXIC",
-        n: "納斯達克指數",
-        m: "us"
-      },
-      {
-        s: "AAPL",
-        n: "蘋果公司 Apple",
-        m: "us"
-      }
-    ];
-    persistSaved();
-  }
-  try {
-    const pRaw =
-      localStorage.getItem(PREF_KEY);
-    if (pRaw) {
-      const p = JSON.parse(pRaw);
-      if (p.market) {
-        st.market = p.market;
-      }
+    const rawP = localStorage.getItem(
+      PREF_KEY
+    );
+    if (rawP) {
+      const p = JSON.parse(rawP);
+      if (p.market) st.market = p.market;
       if (p.code) st.code = p.code;
-      if (p.name != null) {
-        st.name = p.name;
-      }
+      if (p.name) st.name = p.name;
       if (p.style) st.style = p.style;
       if (p.interval) {
         st.interval = p.interval;
@@ -1375,90 +1372,36 @@ function restoreState() {
       if (p.timeMode) {
         st.timeMode = p.timeMode;
       }
+      if (typeof p.showSwing ===
+        "boolean") {
+        st.showSwing = p.showSwing;
+      }
+      if (typeof p.showGrid ===
+        "boolean") {
+        st.showGrid = p.showGrid;
+      }
+      if (typeof p.showFib ===
+        "boolean") {
+        st.showFib = p.showFib;
+      }
+      if (typeof p.showHarm ===
+        "boolean") {
+        st.showHarm = p.showHarm;
+      }
       if (p.volMult) {
         st.volMult = p.volMult;
       }
       if (p.histBars) {
         st.histBars = p.histBars;
       }
-      if (p.showSwing != null) {
-        st.showSwing = p.showSwing;
-      }
-      if (p.showGrid != null) {
-        st.showGrid = p.showGrid;
-      }
-      if (p.showFib != null) {
-        st.showFib = p.showFib;
-      }
-      if (p.showHarm != null) {
-        st.showHarm = p.showHarm;
+      if (typeof p.moveLine ===
+        "boolean") {
+        st.moveLine = p.moveLine;
       }
     }
   } catch (e) {}
-
-  document.getElementById(
-    "codeInp"
-  ).value = st.code;
-  setSegVal("mktSeg", st.market);
-  setSegVal("stySeg", st.style);
-  setSegVal("intSeg", st.interval);
-  setSegVal("horSeg", st.horizon);
-  setSegVal("dirSeg", st.dir);
-  setSegVal("tModeSeg", st.timeMode);
-  syncTimeModeVis();
-  document
-    .getElementById("togSwing")
-    .classList.toggle(
-      "on",
-      st.showSwing
-    );
-  document
-    .getElementById("togGrid")
-    .classList.toggle(
-      "on",
-      st.showGrid
-    );
-  document
-    .getElementById("togFib")
-    .classList.toggle(
-      "on",
-      st.showFib
-    );
-  document
-    .getElementById("togHarm")
-    .classList.toggle(
-      "on",
-      st.showHarm
-    );
-  document.getElementById(
-    "volLbl"
-  ).textContent =
-    "波動:" +
-    st.volMult.toFixed(1) + "x";
-}
-
-function savePrefs() {
-  try {
-    localStorage.setItem(
-      PREF_KEY,
-      JSON.stringify({
-        market: st.market,
-        code: st.code,
-        name: st.name,
-        style: st.style,
-        interval: st.interval,
-        horizon: st.horizon,
-        dir: st.dir,
-        timeMode: st.timeMode,
-        volMult: st.volMult,
-        histBars: st.histBars,
-        showSwing: st.showSwing,
-        showGrid: st.showGrid,
-        showFib: st.showFib,
-        showHarm: st.showHarm
-      })
-    );
-  } catch (e) {}
+  syncControlsUI();
+  syncModeBtn();
 }
 
 function persistSaved() {
@@ -1470,13 +1413,14 @@ function persistSaved() {
   } catch (e) {}
 }
 
-function recordSaved(sym, nm, mkt) {
+function recordSaved(sym, name, mkt) {
+  const disp = name || sym;
   st.saved = st.saved.filter(
     x => x.s !== sym
   );
   st.saved.unshift({
     s: sym,
-    n: nm || sym,
+    n: disp,
     m: mkt
   });
   if (st.saved.length > 30) {
@@ -1486,138 +1430,269 @@ function recordSaved(sym, nm, mkt) {
   fillPresets();
 }
 
+function normSym(raw, mkt) {
+  let s = raw.trim().toUpperCase();
+  if (!s) {
+    return mkt === "hk"
+      ? "^HSI" : "^IXIC";
+  }
+  if (
+    s === "HSI" ||
+    s === "HSCE" ||
+    s === "IXIC" ||
+    s === "GSPC" ||
+    s === "DJI"
+  ) {
+    return "^" + s;
+  }
+  if (s === "BRK.B") s = "BRK-B";
+  if (s === "BRK.A") s = "BRK-A";
+  if (
+    mkt === "hk" &&
+    !s.endsWith(".HK") &&
+    !s.startsWith("^")
+  ) {
+    const d = s.replace(/\D/g, "");
+    if (d) {
+      return d.padStart(4, "0") +
+        ".HK";
+    }
+  }
+  return s;
+}
+
+function getRange(iv) {
+  if (iv === "15m") return "30d";
+  if (iv === "30m") return "60d";
+  if (iv === "60m") return "180d";
+  if (iv === "1d") return "5y";
+  if (iv === "1wk") return "15y";
+  return "max";
+}
+
+function parseYahooObj(json, iv) {
+  const res =
+    json?.chart?.result?.[0];
+  if (!res || !res.timestamp) {
+    return null;
+  }
+  const ts = res.timestamp;
+  const q = res.indicators.quote[0];
+  const reg =
+    res.meta?.currentTradingPeriod
+      ?.regular;
+  const rStart = reg?.start;
+  const rEnd = reg?.end;
+  const out = [];
+  let idx = 0;
+  for (let i = 0; i < ts.length; i++) {
+    const o = q.open[i];
+    const h = q.high[i];
+    const l = q.low[i];
+    const c = q.close[i];
+    if (
+      o == null || h == null ||
+      l == null || c == null
+    ) {
+      continue;
+    }
+    if (
+      isIntraIv(iv) &&
+      typeof rStart === "number" &&
+      typeof rEnd === "number"
+    ) {
+      const dm = ts[i] % 86400;
+      const sm = rStart % 86400;
+      const em = rEnd % 86400;
+      if (sm < em &&
+        (dm < sm || dm > em)) {
+        continue;
+      }
+    }
+    const v = Array.isArray(q.volume)
+      ? (q.volume[i] || 0) : 0;
+    out.push({
+      id: idx++,
+      date: new Date(ts[i] * 1000),
+      open: o,
+      high: h,
+      low: l,
+      close: c,
+      volume: v
+    });
+  }
+  const nm =
+    res.meta?.shortName ||
+    res.meta?.longName || "";
+  return { name: nm, candles: out };
+}
+
+async function fetchSeries(sym, iv) {
+  const rng = getRange(iv);
+  const proxyUrl =
+    "/.netlify/functions/yahoo" +
+    "?symbol=" +
+    encodeURIComponent(sym) +
+    "&interval=" + iv +
+    "&range=" + rng;
+
+  try {
+    const r = await fetch(proxyUrl);
+    if (r.ok) {
+      const src =
+        r.headers.get("X-Source") ||
+        "Cloud-OK";
+      const j = await r.json();
+      const parsed = parseYahooObj(
+        j,
+        iv
+      );
+      if (parsed &&
+        parsed.candles.length >= 15) {
+        return { ...parsed, src };
+      }
+    }
+  } catch (e) {}
+
+  const yhBase =
+    "https://query1.finance" +
+    ".yahoo.com/v8/finance/chart/" +
+    encodeURIComponent(sym) +
+    "?range=" + rng +
+    "&interval=" + iv +
+    "&includePrePost=false";
+  const c1 =
+    "https://api.allorigins.win" +
+    "/raw?url=" +
+    encodeURIComponent(yhBase);
+  const r2 = await fetch(c1);
+  const j2 = await r2.json();
+  const p2 = parseYahooObj(j2, iv);
+  if (p2 && p2.candles.length >= 15) {
+    return {
+      ...p2,
+      src: "Backup-CORS"
+    };
+  }
+  throw new Error("無法取得足夠報價");
+}
+
 function fillPresets() {
   const sel = document.getElementById(
     "presetSel"
   );
-  sel.innerHTML = "";
-  const defOpt =
-    document.createElement("option");
-  defOpt.value = "";
-  defOpt.textContent =
-    "自選 (" + st.saved.length + ")";
-  sel.appendChild(defOpt);
-  for (const it of st.saved) {
-    const o =
-      document.createElement("option");
-    o.value = it.s;
-    o.textContent =
-      "[" +
-      (it.m === "hk" ? "港" : "美") +
-      "] " + it.s + " " + it.n;
-    if (it.s === st.code) {
-      o.selected = true;
+  sel.innerHTML =
+    '<option value="">自選紀錄(' +
+    st.saved.length +
+    ')</option>';
+  for (const p of st.saved) {
+    const opt = document
+      .createElement("option");
+    opt.value = p.s + "|" + p.m;
+    opt.textContent =
+      p.s + " " + p.n;
+    if (p.s === st.code) {
+      opt.selected = true;
     }
-    sel.appendChild(o);
+    sel.appendChild(opt);
   }
 }
 
-async function searchStocks(q) {
-  const up = q.toUpperCase();
-  const list = [];
+async function searchCandidates(q) {
+  const up = q.trim().toUpperCase();
+  if (!up) return [];
+  const res = [];
   const seen = new Set();
-  for (const it of CATALOG) {
+  for (const c of CATALOG) {
     if (
-      it.s.includes(up) ||
-      it.n.toUpperCase().includes(up)
+      c.s.toUpperCase().includes(up) ||
+      c.n.toUpperCase().includes(up)
     ) {
-      list.push(it);
-      seen.add(it.s);
+      res.push(c);
+      seen.add(c.s);
     }
   }
   try {
-    const r = await fetch(
+    const url =
       "/.netlify/functions/yahoo" +
       "?action=search&q=" +
-      encodeURIComponent(q)
-    );
+      encodeURIComponent(q);
+    const r = await fetch(url);
     if (r.ok) {
       const j = await r.json();
       const qs = j?.quotes || [];
       for (const qt of qs) {
-        const s = qt.symbol;
-        if (!s || seen.has(s)) {
+        const sym = qt.symbol;
+        if (!sym || seen.has(sym)) {
           continue;
         }
-        const exRaw = (
+        const ex = (
           qt.exchDisp ||
-          qt.exchange ||
-          "US"
+          qt.exchange || "US"
         ).toUpperCase();
         const isHK =
-          s.endsWith(".HK") ||
-          exRaw.includes("HKG") ||
-          exRaw.includes("HKSE");
+          sym.endsWith(".HK") ||
+          ex.includes("HKG");
         const isOtc =
-          exRaw.includes("OTC") ||
-          exRaw.includes("PNK");
+          ex.includes("OTC") ||
+          ex.includes("PNK");
         const tp =
           qt.quoteType === "ETF"
             ? "ETF"
             : (qt.quoteType === "INDEX"
               ? "指數" : "股票");
-        list.push({
-          s,
-          n: resolveName(
-            s,
-            qt.shortname || qt.longname
-          ),
+        res.push({
+          s: sym,
+          n: NAMES[sym] ||
+            qt.shortname ||
+            qt.longname || sym,
           ex: isHK
             ? "HKEX"
-            : (isOtc ? "OTC" : exRaw),
+            : (isOtc ? "OTC" : ex),
           tp,
           m: isHK ? "hk" : "us",
           otc: isOtc
         });
-        seen.add(s);
+        seen.add(sym);
       }
     }
   } catch (e) {}
-  return list
-    .sort((a, b) => a.otc - b.otc)
-    .slice(0, 8);
+  res.sort((a, b) =>
+    (a.otc === b.otc)
+      ? 0 : (a.otc ? 1 : -1)
+  );
+  return res.slice(0, 8);
 }
 
-function renderAc(list) {
-  const box =
-    document.getElementById("acBox");
-  box.innerHTML = "";
+function renderAcBox(list) {
+  const box = document.getElementById(
+    "acBox"
+  );
   if (!list || list.length === 0) {
     box.style.display = "none";
     return;
   }
-  for (const it of list) {
-    const row =
-      document.createElement("div");
+  box.innerHTML = "";
+  for (const item of list) {
+    const row = document
+      .createElement("div");
     row.className = "ac-item";
-
-    const sEl =
-      document.createElement("span");
-    sEl.className = "ac-sym";
-    sEl.textContent = it.s;
-
-    const nEl =
-      document.createElement("span");
-    nEl.className = "ac-nm";
-    nEl.textContent = it.n;
-
-    const bEl =
-      document.createElement("span");
-    bEl.className = it.otc
+    const bdgCls = item.otc
       ? "ac-bdg ac-otc" : "ac-bdg";
-    bEl.textContent =
-      it.ex + "·" + it.tp;
-
-    row.appendChild(sEl);
-    row.appendChild(nEl);
-    row.appendChild(bEl);
-    row.onclick = () => {
+    row.innerHTML =
+      '<span class="ac-sym">' +
+      item.s + '</span>' +
+      '<span class="ac-nm">' +
+      item.n + '</span>' +
+      '<span class="' + bdgCls + '">' +
+      item.ex + '·' + item.tp +
+      '</span>';
+    row.onmousedown = e => {
+      e.preventDefault();
       box.style.display = "none";
-      st.market = it.m;
-      setSegVal("mktSeg", it.m);
-      document.getElementById(
-        "codeInp"
-      ).value = it.s;
+      st.market = item.m;
+      st.code = item.s;
+      syncControlsUI();
       loadSymbol();
     };
     box.appendChild(row);
@@ -1625,324 +1700,214 @@ function renderAc(list) {
   box.style.display = "block";
 }
 
-function parseChartJson(txt, sym) {
-  const obj = JSON.parse(txt);
-  const res =
-    obj?.chart?.result?.[0];
-  if (!res || !res.timestamp) {
-    return null;
-  }
-  const ts = res.timestamp;
-  const q =
-    res.indicators?.quote?.[0];
-  if (!q) return null;
-  const apiNm =
-    res.meta?.shortName ||
-    res.meta?.longName;
-  const candles = [];
-  let idx = 0;
-  for (let i = 0; i < ts.length; i++) {
-    const o = q.open?.[i];
-    const h = q.high?.[i];
-    const l = q.low?.[i];
-    const c = q.close?.[i];
-    if (
-      o == null ||
-      h == null ||
-      l == null ||
-      c == null
-    ) {
-      continue;
-    }
-    candles.push({
-      id: idx++,
-      date: ts[i] * 1000,
-      open: o,
-      high: h,
-      low: l,
-      close: c,
-      volume: q.volume?.[i] || 0
-    });
-  }
-  if (candles.length < 15) {
-    return null;
-  }
-  return {
-    name: resolveName(sym, apiNm),
-    candles
-  };
-}
-
-async function fetchOneSeries(
-  sym,
-  iv
-) {
-  let rng = "5y";
-  if (iv === "15m") rng = "30d";
-  else if (iv === "30m") rng = "60d";
-  else if (iv === "60m") rng = "180d";
-  else if (iv === "1wk") rng = "15y";
-  else if (iv === "1mo") rng = "max";
-
-  const cacheK =
-    "gann_web_c4_" + sym + "_" + iv;
-  const url =
-    "/.netlify/functions/yahoo" +
-    "?symbol=" +
-    encodeURIComponent(sym) +
-    "&interval=" + iv +
-    "&range=" + rng;
-  try {
-    const r = await fetch(url);
-    if (r.ok) {
-      const txt = await r.text();
-      const parsed = parseChartJson(
-        txt,
-        sym
-      );
-      if (parsed) {
-        try {
-          localStorage.setItem(
-            cacheK,
-            JSON.stringify(parsed)
-          );
-        } catch (e) {}
-        return {
-          parsed,
-          src:
-            r.headers.get("X-Source") ||
-            "雲端連線"
-        };
-      }
-    }
-  } catch (e) {}
-
-  try {
-    const raw =
-      localStorage.getItem(cacheK);
-    if (raw) {
-      return {
-        parsed: JSON.parse(raw),
-        src: "離線快取"
-      };
-    }
-  } catch (e) {}
-  return null;
-}
-
 async function loadSymbol() {
-  const myReq = ++st.reqId;
+  const myId = ++st.reqId;
   const raw = document.getElementById(
     "codeInp"
   ).value;
-  const sym = normalizeSym(
+  const sym = normSym(
     raw,
     st.market
   );
+  st.code = sym;
   document.getElementById(
     "codeInp"
   ).value = sym;
-  st.code = sym;
-  st.name = resolveName(sym, "");
+  document.getElementById(
+    "acBox"
+  ).style.display = "none";
+  st.name = NAMES[sym] || "";
   st.customAnc = null;
   st.selBar = null;
   st.panOff = 0;
-
-  const loadBox =
-    document.getElementById("loadBox");
-  const errBox =
-    document.getElementById("errBox");
-  loadBox.style.display = "flex";
-  errBox.style.display = "none";
-
-  const hit = await fetchOneSeries(
-    sym,
-    st.interval
-  );
-  if (myReq !== st.reqId) return;
-
-  if (!hit) {
-    loadBox.style.display = "none";
-    errBox.className = "err";
-    errBox.textContent =
-      "報價讀取失敗，請檢查代碼：" +
-      sym;
-    errBox.style.display = "block";
-    return;
-  }
-
-  st.candles = hit.parsed.candles;
-  if (hit.parsed.name) {
-    st.name = hit.parsed.name;
-  }
-
-  if (st.interval === "1d") {
-    st.dailyCandles = st.candles;
-  } else if (isIntraIv(st.interval)) {
-    const dHit = await fetchOneSeries(
-      sym,
-      "1d"
-    );
-    if (myReq !== st.reqId) return;
-    st.dailyCandles = dHit
-      ? dHit.parsed.candles : [];
-  }
-
-  loadBox.style.display = "none";
-  const srcTag =
-    document.getElementById("srcTag");
-  srcTag.textContent =
-    hit.src === "離線快取"
-      ? "離線快取"
-      : "雲端:" + hit.src;
-  if (hit.src === "離線快取") {
-    errBox.className = "err warn";
-    errBox.textContent =
-      "當前顯示本地快取歷史數據";
-    errBox.style.display = "block";
-  }
-
-  recordSaved(
-    sym,
-    st.name,
-    st.market
-  );
   savePrefs();
-  runAnalysis();
+  showMsg("");
+  document.getElementById(
+    "loadBox"
+  ).style.display = "flex";
+  try {
+    const data = await fetchSeries(
+      sym,
+      st.interval
+    );
+    if (myId !== st.reqId) return;
+    st.candles = data.candles;
+    if (st.interval === "1d") {
+      st.dailyCandles = data.candles;
+    } else if (isIntraIv(
+      st.interval
+    )) {
+      try {
+        const dRes = await fetchSeries(
+          sym,
+          "1d"
+        );
+        if (myId === st.reqId) {
+          st.dailyCandles =
+            dRes.candles;
+        }
+      } catch (e) {}
+    }
+    if (NAMES[sym]) {
+      st.name = NAMES[sym];
+    } else if (data.name) {
+      st.name = data.name;
+    }
+    recordSaved(
+      sym,
+      st.name,
+      st.market
+    );
+    savePrefs();
+    document.getElementById(
+      "srcTag"
+    ).textContent = data.src;
+    runAnalysis();
+  } catch (err) {
+    if (myId !== st.reqId) return;
+    showMsg(
+      "無法讀取 " + sym +
+      "，請檢查代碼或網絡。"
+    );
+  }
+  if (myId === st.reqId) {
+    document.getElementById(
+      "loadBox"
+    ).style.display = "none";
+  }
 }
 
-function detectSwings(cs, iv) {
-  let hiAll = -Infinity;
-  let loAll = Infinity;
-  for (const c of cs) {
-    if (c.high > hiAll) hiAll = c.high;
-    if (c.low < loAll) loAll = c.low;
+function detectSwings(candles, iv) {
+  let hi = -Infinity;
+  let lo = Infinity;
+  for (const c of candles) {
+    if (c.high > hi) hi = c.high;
+    if (c.low < lo) lo = c.low;
   }
-  const span =
-    (hiAll - loAll) /
-    Math.max(0.01, loAll);
-  const intra = isIntraIv(iv);
-  const minTh = intra ? 0.006 : 0.025;
-  const maxTh = intra ? 0.045 : 0.12;
-  const mult = intra ? 0.10 : 0.14;
-  const thresh = Math.max(
+  const span = (hi - lo) /
+    Math.max(0.01, lo);
+  const minTh = isIntraIv(iv)
+    ? 0.006 : 0.025;
+  const maxTh = isIntraIv(iv)
+    ? 0.045 : 0.12;
+  const mult = isIntraIv(iv)
+    ? 0.10 : 0.14;
+  const th = Math.max(
     minTh,
     Math.min(maxTh, span * mult)
   );
   const pts = [];
   let mode = 0;
-  let curHi = cs[0].high;
-  let curHiI = 0;
-  let curLo = cs[0].low;
-  let curLoI = 0;
+  let cHi = candles[0].high;
+  let cHiI = 0;
+  let cLo = candles[0].low;
+  let cLoI = 0;
 
-  for (const c of cs) {
-    if (c.high > curHi) {
-      curHi = c.high;
-      curHiI = c.id;
+  for (const c of candles) {
+    if (c.high > cHi) {
+      cHi = c.high;
+      cHiI = c.id;
     }
-    if (c.low < curLo) {
-      curLo = c.low;
-      curLoI = c.id;
+    if (c.low < cLo) {
+      cLo = c.low;
+      cLoI = c.id;
     }
     if (mode === 0) {
-      const upM =
-        (c.high - curLo) /
-        Math.max(0.001, curLo);
-      const dnM =
-        (curHi - c.low) /
-        Math.max(0.001, curHi);
-      if (upM >= thresh) {
+      const up = (c.high - cLo) /
+        Math.max(0.001, cLo);
+      const dn = (cHi - c.low) /
+        Math.max(0.001, cHi);
+      if (up >= th) {
         pts.push({
-          index: curLoI,
-          date: cs[curLoI].date,
-          price: curLo,
+          index: cLoI,
+          date: candles[cLoI].date,
+          price: cLo,
           isHigh: false
         });
         mode = 1;
-        curHi = c.high;
-        curHiI = c.id;
-      } else if (dnM >= thresh) {
+        cHi = c.high;
+        cHiI = c.id;
+      } else if (dn >= th) {
         pts.push({
-          index: curHiI,
-          date: cs[curHiI].date,
-          price: curHi,
+          index: cHiI,
+          date: candles[cHiI].date,
+          price: cHi,
           isHigh: true
         });
         mode = -1;
-        curLo = c.low;
-        curLoI = c.id;
+        cLo = c.low;
+        cLoI = c.id;
       }
     } else if (mode === 1) {
-      const drop =
-        (curHi - c.low) /
-        Math.max(0.001, curHi);
-      if (drop >= thresh) {
+      const drop = (cHi - c.low) /
+        Math.max(0.001, cHi);
+      if (drop >= th) {
         pts.push({
-          index: curHiI,
-          date: cs[curHiI].date,
-          price: curHi,
+          index: cHiI,
+          date: candles[cHiI].date,
+          price: cHi,
           isHigh: true
         });
         mode = -1;
-        curLo = c.low;
-        curLoI = c.id;
+        cLo = c.low;
+        cLoI = c.id;
       }
     } else {
-      const rise =
-        (c.high - curLo) /
-        Math.max(0.001, curLo);
-      if (rise >= thresh) {
+      const rise = (c.high - cLo) /
+        Math.max(0.001, cLo);
+      if (rise >= th) {
         pts.push({
-          index: curLoI,
-          date: cs[curLoI].date,
-          price: curLo,
+          index: cLoI,
+          date: candles[cLoI].date,
+          price: cLo,
           isHigh: false
         });
         mode = 1;
-        curHi = c.high;
-        curHiI = c.id;
+        cHi = c.high;
+        cHiI = c.id;
       }
     }
   }
   return pts;
 }
 
-function buildMechSwings(cs, order) {
-  if (cs.length < 3) return [];
-  const act = [cs[0]];
-  for (let i = 1; i < cs.length; i++) {
-    const c = cs[i];
-    const p = act[act.length - 1];
-    if (
-      !(c.high <= p.high &&
-        c.low >= p.low)
-    ) {
-      act.push(c);
-    }
+function buildMechSwings(
+  candles,
+  order
+) {
+  if (candles.length < 3) return [];
+  const active = [candles[0]];
+  for (let i = 1; i < candles.length; i++) {
+    const cur = candles[i];
+    const prev =
+      active[active.length - 1];
+    const inside =
+      cur.high <= prev.high &&
+      cur.low >= prev.low;
+    if (!inside) active.push(cur);
   }
-  if (act.length < 3) return [];
+  if (active.length < 3) return [];
   const res = [];
   let dir = 0;
-  let upC = 0;
-  let dnC = 0;
-  let extH = act[0];
-  let extL = act[0];
+  let upCnt = 0;
+  let dnCnt = 0;
+  let extH = active[0];
+  let extL = active[0];
 
-  for (let i = 1; i < act.length; i++) {
-    const c = act[i];
-    const p = act[i - 1];
+  for (let i = 1; i < active.length; i++) {
+    const c = active[i];
+    const p = active[i - 1];
     const hh = c.high > p.high;
     const ll = c.low < p.low;
     if (hh && !ll) {
-      upC += 1;
-      dnC = 0;
+      upCnt++;
+      dnCnt = 0;
     } else if (ll && !hh) {
-      dnC += 1;
-      upC = 0;
+      dnCnt++;
+      upCnt = 0;
     }
     if (dir === 0) {
-      if (upC >= order) {
+      if (upCnt >= order) {
         res.push({
           index: extL.id,
           date: extL.date,
@@ -1951,7 +1916,7 @@ function buildMechSwings(cs, order) {
         });
         dir = 1;
         extH = c;
-      } else if (dnC >= order) {
+      } else if (dnCnt >= order) {
         res.push({
           index: extH.id,
           date: extH.date,
@@ -1972,7 +1937,7 @@ function buildMechSwings(cs, order) {
       if (c.high >= extH.high) {
         extH = c;
       }
-      if (dnC >= order) {
+      if (dnCnt >= order) {
         res.push({
           index: extH.id,
           date: extH.date,
@@ -1986,7 +1951,7 @@ function buildMechSwings(cs, order) {
       if (c.low <= extL.low) {
         extL = c;
       }
-      if (upC >= order) {
+      if (upCnt >= order) {
         res.push({
           index: extL.id,
           date: extL.date,
@@ -1999,11 +1964,9 @@ function buildMechSwings(cs, order) {
     }
   }
   const tail = dir >= 0 ? extH : extL;
-  if (
-    !res.length ||
+  if (!res.length ||
     res[res.length - 1].index !==
-      tail.id
-  ) {
+    tail.id) {
     res.push({
       index: tail.id,
       date: tail.date,
@@ -2015,71 +1978,376 @@ function buildMechSwings(cs, order) {
   return res;
 }
 
-function pickAnchor(
-  cs,
+function calcMechStop(
+  candles,
+  mechSwings,
+  isUp,
+  iv
+) {
+  const last =
+    candles[candles.length - 1];
+  const defUp = isIntraIv(iv)
+    ? 0.985 : 0.96;
+  const defDn = isIntraIv(iv)
+    ? 1.015 : 1.04;
+  const defLbl = isIntraIv(iv)
+    ? "日內1.5%窄幅硬性止損"
+    : "江恩4%標準保護止損";
+  let stUp = 0;
+  let stDn = 0;
+  for (
+    let i = candles.length - 1;
+    i > 0;
+    i--
+  ) {
+    const c = candles[i];
+    const p = candles[i - 1];
+    if (c.high > p.high &&
+      c.low >= p.low && stDn === 0) {
+      stUp++;
+    } else if (c.low < p.low &&
+      c.high <= p.high && stUp === 0) {
+      stDn++;
+    } else {
+      break;
+    }
+  }
+  const mid = (last.high + last.low) / 2;
+  if (isUp) {
+    if (stUp >= 7) {
+      return {
+        price: last.low * 0.996,
+        reason: "連續" + stUp +
+          "期單邊(7期法則收緊止損)"
+      };
+    }
+    const prevH = candles.length >= 2
+      ? candles[candles.length - 2].high
+      : last.high;
+    if (last.high > prevH &&
+      last.close < last.open &&
+      last.close < mid) {
+      return {
+        price: last.low * 0.996,
+        reason: "出現三重信號頂部(" +
+          "破低即止盈離場)"
+      };
+    }
+    for (
+      let i = mechSwings.length - 1;
+      i >= 0;
+      i--
+    ) {
+      const s = mechSwings[i];
+      if (!s.isHigh &&
+        s.price < last.close) {
+        return {
+          price: s.price * 0.995,
+          reason: "機械擺動底(" +
+            fmtDate(
+              s.date,
+              isIntraIv(iv)
+            ) + ")"
+        };
+      }
+    }
+    return {
+      price: last.close * defUp,
+      reason: defLbl
+    };
+  } else {
+    if (stDn >= 7) {
+      return {
+        price: last.high * 1.004,
+        reason: "連續" + stDn +
+          "期單邊(7期法則收緊止損)"
+      };
+    }
+    const prevL = candles.length >= 2
+      ? candles[candles.length - 2].low
+      : last.low;
+    if (last.low < prevL &&
+      last.close > last.open &&
+      last.close > mid) {
+      return {
+        price: last.high * 1.004,
+        reason: "出現三重信號底部(" +
+          "升破即空單平倉)"
+      };
+    }
+    for (
+      let i = mechSwings.length - 1;
+      i >= 0;
+      i--
+    ) {
+      const s = mechSwings[i];
+      if (s.isHigh &&
+        s.price > last.close) {
+        return {
+          price: s.price * 1.005,
+          reason: "機械擺動頂(" +
+            fmtDate(
+              s.date,
+              isIntraIv(iv)
+            ) + ")"
+        };
+      }
+    }
+    return {
+      price: last.close * defDn,
+      reason: defLbl
+    };
+  }
+}
+
+function calcOverbalance(
+  candles,
   swings,
-  custIdx,
+  isUp,
+  iv,
+  tm
+) {
+  if (swings.length < 4) {
+    return "波段數據累積中，平衡正常";
+  }
+  const last =
+    candles[candles.length - 1];
+  const u = unitNameOf(iv, tm);
+  let maxDrop = 0;
+  let maxBars = 0;
+  for (let i = 1; i < swings.length; i++) {
+    const a = swings[i - 1];
+    const b = swings[i];
+    const dt = Math.abs(barTimeDelta(
+      candles,
+      a.index,
+      b.index,
+      iv,
+      tm
+    ));
+    if (isUp && a.isHigh && !b.isHigh) {
+      maxDrop = Math.max(
+        maxDrop,
+        a.price - b.price
+      );
+      maxBars = Math.max(maxBars, dt);
+    } else if (!isUp &&
+      !a.isHigh && b.isHigh) {
+      maxDrop = Math.max(
+        maxDrop,
+        b.price - a.price
+      );
+      maxBars = Math.max(maxBars, dt);
+    }
+  }
+  const tail =
+    swings[swings.length - 1];
+  if (!tail || maxDrop <= 0) {
+    return "時空平衡維持正常";
+  }
+  const curDt = Math.abs(barTimeDelta(
+    candles,
+    tail.index,
+    last.id,
+    iv,
+    tm
+  ));
+  const curDp = isUp
+    ? Math.max(0, tail.price - last.low)
+    : Math.max(0, last.high - tail.price);
+  const pOver = curDp > maxDrop;
+  const tOver = curDt > maxBars &&
+    curDp > maxDrop * 0.5;
+  if (pOver || tOver) {
+    return "⚠️已觸發平衡超越！當前" +
+      "回調" + fmt(curDp) + "(" +
+      Math.round(curDt) + u +
+      ")已超前浪極值" +
+      fmt(maxDrop) + "(" +
+      Math.round(maxBars) + u +
+      ")，防範反轉";
+  }
+  return "平衡正常（前浪最大回調" +
+    fmt(maxDrop) + " / " +
+    Math.round(maxBars) + u +
+    "，當前" + fmt(curDp) + " / " +
+    Math.round(curDt) + u + "）";
+}
+
+function calcVolumeDiag(candles) {
+  const valid = candles.filter(
+    c => c.volume > 0
+  );
+  if (valid.length < 60) {
+    return "指數/無成交量數據，略過量能";
+  }
+  const n = candles.length;
+  let r50 = 0;
+  for (let i = n - 50; i < n; i++) {
+    r50 += candles[i].volume || 0;
+  }
+  let p50 = 0;
+  for (
+    let i = Math.max(0, n - 100);
+    i < n - 50;
+    i++
+  ) {
+    p50 += candles[i].volume || 0;
+  }
+  let maxV = 1;
+  for (
+    let i = Math.max(0, n - 250);
+    i < n;
+    i++
+  ) {
+    if (candles[i].volume > maxV) {
+      maxV = candles[i].volume;
+    }
+  }
+  const curV =
+    candles[n - 1].volume || 0;
+  const shrink = curV / maxV;
+  const tags = [];
+  if (p50 > 0) {
+    const ratio = r50 / p50;
+    if (ratio >= 2.0) {
+      tags.push(
+        "50期吸籌動量比 " +
+        ratio.toFixed(2) +
+        "x(>2.0主力顯著放量)"
+      );
+    } else {
+      tags.push(
+        "50期量能動量比 " +
+        ratio.toFixed(2) + "x"
+      );
+    }
+  }
+  if (shrink > 0 && shrink <= 0.25) {
+    tags.push(
+      "當前成交量僅區間峰值" +
+      Math.round(shrink * 100) +
+      "%（符合「地量見地價」特徵）"
+    );
+  }
+  return tags.join("；");
+}
+
+function calcDailyGuide(
+  dailyCandles,
+  iv,
+  isUpFan
+) {
+  if (!isIntraIv(iv)) return "";
+  if (dailyCandles.length < 20) {
+    return "日線定方向：載入日線結構中";
+  }
+  const dSw = detectSwings(
+    dailyCandles,
+    "1d"
+  );
+  const dAnc = pickAnchor(
+    dailyCandles,
+    dSw,
+    null,
+    "auto"
+  );
+  const dUp = !dAnc.isHigh;
+  const dVol = calcVolatility(
+    dailyCandles,
+    dAnc,
+    dSw,
+    "1d",
+    "trading"
+  );
+  const lastD = dailyCandles[
+    dailyCandles.length - 1
+  ];
+  const dt = lastD.id - dAnc.index;
+  const sign = dUp ? 1 : -1;
+  const p1x1 = Math.max(
+    0,
+    dAnc.price + sign * dVol * dt
+  );
+  const above = lastD.close >= p1x1;
+  const dirTxt = above
+    ? "日線多頭強勢(1x1上方)"
+    : "日線空頭弱勢(1x1下方)";
+  const align = (above === isUpFan)
+    ? "順應日線主趨勢"
+    : "⚠️逆日線主方向(僅作短線反抽)";
+  return dirTxt + "｜" + align;
+}
+
+function pickAnchor(
+  candles,
+  swings,
+  customIdx,
   dir
 ) {
   if (
-    custIdx != null &&
-    custIdx >= 0 &&
-    custIdx < cs.length
+    customIdx != null &&
+    customIdx >= 0 &&
+    customIdx < candles.length
   ) {
-    const c = cs[custIdx];
+    const c = candles[customIdx];
     let isH = false;
-    if (dir === "up") isH = false;
-    else if (dir === "down") {
+    if (dir === "up") {
+      isH = false;
+    } else if (dir === "down") {
       isH = true;
     } else {
-      isH =
-        c.close <
+      const mid =
         (c.high + c.low) / 2;
+      isH = c.close < mid;
     }
     return {
-      index: custIdx,
+      index: customIdx,
       date: c.date,
       price: isH ? c.high : c.low,
       isHigh: isH
     };
   }
-  const look = Math.min(
-    cs.length,
-    160
+  const start = Math.max(
+    0,
+    candles.length - 160
   );
-  const start = cs.length - look;
-  const rec = swings.filter(
-    s =>
-      s.index >= start &&
-      s.index < cs.length - 5
+  const recent = swings.filter(
+    s => s.index >= start &&
+      s.index < candles.length - 5
   );
   if (dir === "up") {
-    const lo = [...rec]
-      .reverse()
-      .find(s => !s.isHigh);
-    if (lo) return lo;
+    const lows = recent.filter(
+      s => !s.isHigh
+    );
+    if (lows.length) {
+      return lows[lows.length - 1];
+    }
   } else if (dir === "down") {
-    const hi = [...rec]
-      .reverse()
-      .find(s => s.isHigh);
-    if (hi) return hi;
-  } else if (rec.length > 0) {
-    return rec[rec.length - 1];
+    const highs = recent.filter(
+      s => s.isHigh
+    );
+    if (highs.length) {
+      return highs[highs.length - 1];
+    }
+  } else if (recent.length) {
+    return recent[recent.length - 1];
   }
-
-  let best = cs[start];
+  let best = candles[start];
   for (
-    let i = start + 1;
-    i < cs.length;
+    let i = start;
+    i < candles.length;
     i++
   ) {
     if (dir === "down") {
-      if (cs[i].high > best.high) {
-        best = cs[i];
+      if (candles[i].high >
+        best.high) {
+        best = candles[i];
       }
     } else {
-      if (cs[i].low < best.low) {
-        best = cs[i];
+      if (candles[i].low <
+        best.low) {
+        best = candles[i];
       }
     }
   }
@@ -2087,154 +2355,146 @@ function pickAnchor(
   return {
     index: best.id,
     date: best.date,
-    price: isH
-      ? best.high : best.low,
+    price: isH ? best.high : best.low,
     isHigh: isH
   };
 }
 
-function calcVol(
-  cs,
-  anc,
+function calcVolatility(
+  candles,
+  anchor,
   swings,
   iv,
-  tMode
+  tm
 ) {
+  const effTm = isIntraIv(iv)
+    ? "trading" : tm;
   const after = swings.filter(
-    s => s.index > anc.index + 3
+    s => s.index > anchor.index + 3
   );
-  if (after.length > 0) {
-    const nxt = after[0];
+  if (after.length) {
+    const n = after[0];
     const dp = Math.abs(
-      nxt.price - anc.price
+      n.price - anchor.price
     );
-    const dt = Math.abs(
-      barTimeDelta(
-        cs,
-        anc.index,
-        nxt.index,
-        iv,
-        tMode
-      )
-    );
+    const dt = Math.abs(barTimeDelta(
+      candles,
+      anchor.index,
+      n.index,
+      iv,
+      effTm
+    ));
     return dp / Math.max(1, dt);
   }
-  const last = cs[cs.length - 1];
+  const last =
+    candles[candles.length - 1];
   const dp = Math.abs(
-    last.close - anc.price
+    last.close - anchor.price
   );
-  const dt = Math.abs(
-    barTimeDelta(
-      cs,
-      anc.index,
-      last.id,
-      iv,
-      tMode
-    )
-  );
+  const dt = Math.abs(barTimeDelta(
+    candles,
+    anchor.index,
+    last.id,
+    iv,
+    effTm
+  ));
   return dp / Math.max(1, dt);
 }
 
 function buildRays(
-  cs,
-  anc,
+  candles,
+  anchor,
   isUp,
   vol,
   endIdx,
   iv,
-  tMode
+  tm
 ) {
   const specs = [
-    ["8x1", 8.0],
-    ["4x1", 4.0],
-    ["3x1", 3.0],
-    ["2x1", 2.0],
-    ["1x1", 1.0],
+    ["8x1", 8],
+    ["4x1", 4],
+    ["3x1", 3],
+    ["2x1", 2],
+    ["1x1", 1],
     ["1x2", 0.5],
     ["1x3", 1 / 3],
     ["1x4", 0.25],
     ["1x8", 0.125]
   ];
-  const s = isUp ? 1 : -1;
-  return specs.map(([nm, r]) => {
+  const sign = isUp ? 1 : -1;
+  const step = Math.max(
+    1,
+    Math.floor(
+      (endIdx - anchor.index) / 60
+    )
+  );
+  return specs.map(([name, r]) => {
     const pts = [];
-    const step = Math.max(
-      1,
-      Math.floor(
-        (endIdx - anc.index) / 60
-      )
-    );
     for (
-      let i = anc.index;
+      let i = anchor.index;
       i <= endIdx;
       i += step
     ) {
       const dt = barTimeDelta(
-        cs,
-        anc.index,
+        candles,
+        anchor.index,
         i,
         iv,
-        tMode
+        tm
       );
-      const p =
-        anc.price + s * vol * r * dt;
+      const p = anchor.price +
+        sign * vol * r * dt;
       if (p >= 0) {
-        pts.push({
-          barIndex: i,
-          price: p
-        });
+        pts.push({ i, p });
       }
     }
-    if (
-      pts.length &&
-      pts[pts.length - 1].barIndex <
-        endIdx
-    ) {
-      const dt = barTimeDelta(
-        cs,
-        anc.index,
-        endIdx,
-        iv,
-        tMode
-      );
+    const dtEnd = barTimeDelta(
+      candles,
+      anchor.index,
+      endIdx,
+      iv,
+      tm
+    );
+    const pEnd = Math.max(
+      0,
+      anchor.price +
+        sign * vol * r * dtEnd
+    );
+    if (!pts.length ||
+      pts[pts.length - 1].i < endIdx) {
       pts.push({
-        barIndex: endIdx,
-        price: Math.max(
-          0,
-          anc.price + s * vol * r * dt
-        )
+        i: endIdx,
+        p: pEnd
       });
     }
     return {
-      name: nm,
+      name,
       ratio: r,
-      isPrimary: nm === "1x1",
-      points: pts
+      primary: name === "1x1",
+      pts
     };
   });
 }
 
-function moonEvent(ms) {
-  const ref = 947182440000;
+function moonEvent(d) {
   const syn = 29.53058867;
-  const diff = (ms - ref) / 86400000;
+  const diff =
+    (d.getTime() / 1000 -
+      947182440) / 86400;
   let ph = diff % syn;
   if (ph < 0) ph += syn;
-  if (ph <= 1.0 || ph >= syn - 1.0) {
+  if (ph <= 1 || ph >= syn - 1) {
     return "天文新月窗口";
   }
-  if (
-    Math.abs(ph - syn / 2) <= 1.0
-  ) {
+  if (Math.abs(ph - syn / 2) <= 1) {
     return "天文滿月窗口";
   }
   return null;
 }
 
-function solarTerm(ms) {
-  const d = new Date(ms);
-  const m = d.getUTCMonth() + 1;
-  const day = d.getUTCDate();
+function solarTerm(d) {
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
   const terms = [
     [2, 4, "立春節氣(45度)"],
     [3, 21, "春分節氣(0度)"],
@@ -2246,10 +2506,8 @@ function solarTerm(ms) {
     [12, 22, "冬至節氣(270度)"]
   ];
   for (const [tm, td, nm] of terms) {
-    if (
-      m === tm &&
-      Math.abs(day - td) <= 1
-    ) {
+    if (m === tm &&
+      Math.abs(day - td) <= 1) {
       return nm;
     }
   }
@@ -2257,22 +2515,21 @@ function solarTerm(ms) {
 }
 
 function calcTimeHits(
-  cs,
-  anc,
+  candles,
+  anchor,
   swings,
   vol,
   horizon,
   iv,
-  tMode
+  tm
 ) {
-  const intra = isIntraIv(iv);
-  const fibs = intra
+  const fibs = isIntraIv(iv)
     ? [5, 8, 13, 21, 34, 55, 89, 144]
     : [
       5, 8, 13, 21, 34,
       55, 89, 144, 233
     ];
-  const g7 = intra
+  const gann = isIntraIv(iv)
     ? [
       7, 12, 14, 18, 21, 24, 28,
       30, 42, 45, 49, 60, 72, 90
@@ -2281,75 +2538,69 @@ function calcTimeHits(
       7, 14, 28, 30, 42, 45, 49, 60,
       77, 90, 120, 144, 180, 270, 360
     ];
-  const lastI = cs.length - 1;
-  const lastD = cs[lastI].date;
-  const map = new Map();
-  const majSet = new Set();
-  const unit =
-    tMode === "calendar" &&
-    iv === "1d"
-      ? "自然日" : unitName(iv);
-  const mSuf =
-    tMode === "calendar" && !intra
+  const lastI = candles.length - 1;
+  const lastD = candles[lastI].date;
+  const map = {};
+  const majorSet = new Set();
+  const unit = unitNameOf(iv, tm);
+  const modeSfx =
+    (!isIntraIv(iv) &&
+      tm === "calendar")
       ? "(自然日)" : "";
 
-  const add = (t, msg, isMaj) => {
-    const d = t - lastI;
-    if (d < 1 || d > horizon) return;
-    if (!map.has(t)) map.set(t, []);
-    map.get(t).push(msg);
-    if (isMaj) majSet.add(t);
-  };
-
   const mapBar = (baseI, cnt) => {
-    if (
-      intra ||
-      tMode === "trading"
-    ) {
+    if (isIntraIv(iv) ||
+      tm === "trading") {
       return baseI + cnt;
     }
-    const bMs = dateMsForIndex(
-      cs,
+    const baseD = dateForIndex(
+      candles,
       baseI,
       iv
     );
-    const stepD =
-      iv === "1d"
-        ? 1.0
-        : (iv === "1wk"
-          ? 7.0 : 30.4375);
-    const tMs =
-      bMs + cnt * stepD * 86400000;
-    const off = Math.round(
-      (tMs - lastD) /
-      (approxDays(iv) * 86400000)
+    const addD = cnt * (
+      iv === "1d" ? 1.0 :
+      (iv === "1wk" ? 7.0 : 30.4375)
     );
-    return lastI + off;
+    const tD = addDays(baseD, addD);
+    const diffD =
+      (tD.getTime() -
+        lastD.getTime()) / 86400000;
+    const step = iv === "1mo"
+      ? 30.44
+      : (iv === "1wk" ? 7.0 : 1.45);
+    return lastI +
+      Math.round(diffD / step);
+  };
+
+  const add = (t, msg, isMaj) => {
+    const d = t - lastI;
+    if (d >= 1 && d <= horizon) {
+      if (!map[t]) map[t] = [];
+      map[t].push(msg);
+      if (isMaj) majorSet.add(t);
+    }
   };
 
   for (const f of fibs) {
     add(
-      mapBar(anc.index, f),
+      mapBar(anchor.index, f),
       "費波那契第" + f + unit,
       false
     );
   }
-  for (const g of g7) {
+  for (const g of gann) {
     let note = "";
     if (iv === "60m" && g === 24) {
       note = "(360度日循環)";
-    } else if (
-      iv === "60m" &&
-      g === 49
-    ) {
+    } else if (iv === "60m" &&
+      g === 49) {
       note = "(7x7短線周期)";
-    } else if (
-      iv === "30m" &&
-      g === 48
-    ) {
+    } else if (iv === "30m" &&
+      g === 48) {
       note = "(24小時360度)";
     }
-    const isMaj = intra
+    const isMaj = isIntraIv(iv)
       ? [
         21, 24, 30, 49, 60, 90
       ].includes(g)
@@ -2357,35 +2608,37 @@ function calcTimeHits(
         90, 180, 270, 360
       ].includes(g);
     add(
-      mapBar(anc.index, g),
+      mapBar(anchor.index, g),
       "江恩神奇數" + g + unit + note,
       isMaj
     );
   }
 
-  if (!intra && vol > 0) {
+  if (!isIntraIv(iv) && vol > 0) {
     const sqU = Math.round(
-      anc.price / vol
+      anchor.price / vol
     );
     add(
-      mapBar(anc.index, sqU),
-      "零度線時價成正方" + mSuf,
+      mapBar(anchor.index, sqU),
+      "零度線時價成正方" + modeSfx,
       true
     );
   }
 
   if (swings.length >= 2 && vol > 0) {
-    const prevS =
+    const prevSw =
       swings[swings.length - 2];
-    if (prevS.isHigh !== anc.isHigh) {
+    if (prevSw.isHigh !==
+      anchor.isHigh) {
       const pDiff = Math.abs(
-        prevS.price - anc.price
+        prevSw.price - anchor.price
       );
       const crU = Math.round(
-        pDiff / (2 * vol)
+        pDiff / (2.0 * vol)
       );
       const midB = Math.floor(
-        (prevS.index + anc.index) / 2
+        (prevSw.index + anchor.index) /
+        2
       );
       add(
         mapBar(midB, crU),
@@ -2395,126 +2648,111 @@ function calcTimeHits(
     }
   }
 
-  if (!intra) {
+  if (!isIntraIv(iv)) {
     const safeEnd = Math.max(
       1,
       lastI - 4
     );
-    let topB = cs[0];
-    let botB = cs[0];
-    for (
-      let i = 1;
-      i < safeEnd;
-      i++
-    ) {
-      if (cs[i].high > topB.high) {
-        topB = cs[i];
+    let topBar = candles[0];
+    let botBar = candles[0];
+    for (let i = 0; i < safeEnd; i++) {
+      if (candles[i].high >
+        topBar.high) {
+        topBar = candles[i];
       }
-      if (cs[i].low < botB.low) {
-        botB = cs[i];
+      if (candles[i].low <
+        botBar.low) {
+        botBar = candles[i];
       }
     }
-    const csList =
-      iv === "1mo"
-        ? [60, 90, 120, 180, 240, 360]
-        : [90, 180, 270, 360];
-    for (const c of csList) {
+    const circles = iv === "1mo"
+      ? [60, 90, 120, 180, 240, 360]
+      : [90, 180, 270, 360];
+    for (const c of circles) {
       let note = "";
       if (iv === "1wk" && c === 180) {
         note = "(約3.5年)";
-      } else if (
-        iv === "1wk" &&
-        c === 360
-      ) {
+      } else if (iv === "1wk" &&
+        c === 360) {
         note = "(約7年)";
-      } else if (
-        iv === "1mo" &&
-        c === 120
-      ) {
+      } else if (iv === "1mo" &&
+        c === 120) {
         note = "(10年周期)";
-      } else if (
-        iv === "1mo" &&
-        c === 360
-      ) {
+      } else if (iv === "1mo" &&
+        c === 360) {
         note = "(30年土星)";
       }
       add(
-        mapBar(topB.id, c),
+        mapBar(topBar.id, c),
         "歷史大頂滿" + c + unit + note,
         true
       );
       add(
-        mapBar(botB.id, c),
+        mapBar(botBar.id, c),
         "歷史大底滿" + c + unit + note,
         true
       );
     }
   }
 
-  if (swings.length > 0) {
-    const rec =
-      swings[swings.length - 1];
-    if (rec.index !== anc.index) {
-      const subN = intra
-        ? [7, 12, 18, 21, 30]
-        : [8, 13, 21, 34, 55];
-      for (const f of subN) {
-        add(
-          mapBar(rec.index, f),
-          "次波段第" + f + unit,
-          false
-        );
-      }
+  const lastSw =
+    swings[swings.length - 1];
+  if (lastSw &&
+    lastSw.index !== anchor.index) {
+    const subN = isIntraIv(iv)
+      ? [7, 12, 18, 21, 30]
+      : [8, 13, 21, 34, 55];
+    for (const f of subN) {
+      add(
+        mapBar(lastSw.index, f),
+        "次波段第" + f + unit,
+        false
+      );
     }
   }
 
   if (iv === "1d") {
-    for (
-      let d = 1;
-      d <= horizon;
-      d++
-    ) {
-      const est =
-        lastD +
-        d * approxDays(iv) * 86400000;
-      const mn = moonEvent(est);
-      if (mn) add(lastI + d, mn, false);
-      const tm = solarTerm(est);
-      if (tm) add(lastI + d, tm, false);
+    for (let d = 1; d <= horizon; d++) {
+      const est = addDays(
+        lastD,
+        d * 1.45
+      );
+      const m = moonEvent(est);
+      if (m) add(lastI + d, m, false);
+      const sterm = solarTerm(est);
+      if (sterm) {
+        add(lastI + d, sterm, false);
+      }
     }
   }
 
   const hits = [];
-  const keys = [
-    ...map.keys()
-  ].sort((a, b) => a - b);
+  const keys = Object.keys(map)
+    .map(Number)
+    .sort((a, b) => a - b);
   for (const k of keys) {
-    const rs = map.get(k);
-    const isMaj = majSet.has(k);
-    const keyNum = rs.some(
-      s =>
-        s.includes("18") ||
-        s.includes("21") ||
-        s.includes("30") ||
-        s.includes("49") ||
-        s.includes("55") ||
-        s.includes("89") ||
-        s.includes("90") ||
-        s.includes("144") ||
-        s.includes("180") ||
-        s.includes("360") ||
-        s.includes("正方") ||
-        s.includes("交叉")
+    const rs = map[k];
+    const isMaj = majorSet.has(k);
+    const hasKey = rs.some(
+      x => x.includes("18") ||
+        x.includes("21") ||
+        x.includes("30") ||
+        x.includes("49") ||
+        x.includes("55") ||
+        x.includes("89") ||
+        x.includes("90") ||
+        x.includes("144") ||
+        x.includes("180") ||
+        x.includes("360") ||
+        x.includes("正方") ||
+        x.includes("交叉")
     );
-    if (
-      isMaj ||
-      rs.length >= 2 ||
-      keyNum
-    ) {
+    if (isMaj ||
+      rs.length >= 2 || hasKey) {
       hits.push({
         targetIndex: k,
-        estDate: dateMsForIndex(
-          cs,
+        estDate: dateForIndex(
+          candles,
           k,
           iv
         ),
@@ -2527,8 +2765,57 @@ function calcTimeHits(
   return hits;
 }
 
-function calcFibsAndGrid(cs) {
-  const sub = cs.slice(-260);
+function calcFibs(candles, swings) {
+  const sub = candles.slice(-260);
+  let hi = -Infinity;
+  let lo = Infinity;
+  for (const c of sub) {
+    if (c.high > hi) hi = c.high;
+    if (c.low < lo) lo = c.low;
+  }
+  const span = hi - lo;
+  const ratios = [
+    0.236, 0.382, 0.5,
+    0.618, 0.786, 1.272
+  ];
+  const minor = [];
+  if (swings.length >= 2) {
+    const a =
+      swings[swings.length - 2];
+    const b =
+      swings[swings.length - 1];
+    const mHi = Math.max(
+      a.price,
+      b.price
+    );
+    const mLo = Math.min(
+      a.price,
+      b.price
+    );
+    for (const r of ratios) {
+      minor.push(
+        mHi - (mHi - mLo) * r
+      );
+    }
+  }
+  return ratios.map(r => {
+    const p = hi - span * r;
+    const conf = minor.some(
+      m => Math.abs(m - p) /
+        Math.max(1, p) < 0.018
+    );
+    return {
+      ratio: r,
+      label: "黃金" +
+        Math.round(r * 1000),
+      price: p,
+      conf
+    };
+  });
+}
+
+function calcGannPct(candles) {
+  const sub = candles.slice(-260);
   let hi = -Infinity;
   let lo = Infinity;
   for (const c of sub) {
@@ -2539,32 +2826,22 @@ function calcFibsAndGrid(cs) {
   const gm = Math.sqrt(
     Math.max(0.01, hi * lo)
   );
-  const fR = [
-    0.236, 0.382, 0.5,
-    0.618, 0.786, 1.272
-  ];
-  const fibs = fR.map(r => ({
-    ratio: r,
-    label:
-      "黃金" + Math.round(r * 1000),
-    price: hi - span * r
-  }));
-  const gSpecs = [
+  const specs = [
     [0.125, "1/8(12.5%)", false],
-    [0.25, "2/8(25%)", true],
+    [0.250, "2/8(25%)", true],
     [1 / 3, "1/3(33.3%)", true],
     [0.375, "3/8(37.5%)", false],
-    [0.5, "4/8(50%中軸)", true],
+    [0.500, "4/8(50%中軸)", true],
     [0.625, "5/8(62.5%)", false],
     [2 / 3, "2/3(66.7%)", true],
-    [0.75, "6/8(75%)", true],
+    [0.750, "6/8(75%)", true],
     [0.875, "7/8(87.5%)", false],
     [1.125, "延伸112.5%", false],
     [4 / 3, "延伸133.3%", false],
     [5 / 3, "延伸166.7%", false],
-    [2.0, "延伸200%", false]
+    [2.000, "延伸200%", false]
   ];
-  const pcts = gSpecs.map(
+  const levels = specs.map(
     ([r, lbl, maj]) => ({
       ratio: r,
       label: lbl,
@@ -2572,90 +2849,84 @@ function calcFibsAndGrid(cs) {
       isMajor: maj
     })
   );
-  return { fibs, pcts, gm };
+  return { levels, gm };
 }
 
-function checkCompValid(
-  cs,
+function checkCompletedValid(
+  candles,
   dIdx,
   isBull,
-  xP,
+  xPrice,
   przLo,
   przHi
 ) {
   const start = dIdx + 1;
-  if (start >= cs.length) {
-    return [true, true];
+  if (start >= candles.length) {
+    return { ok: true, active: true };
   }
   let brokeAt = -1;
   if (isBull) {
-    const fl = Math.min(
+    const floor = Math.min(
       przLo * 0.985,
-      xP * 0.99
+      xPrice * 0.99
     );
     for (
       let i = start;
-      i < cs.length;
+      i < candles.length;
       i++
     ) {
-      if (cs[i].low < fl) {
+      if (candles[i].low < floor) {
         brokeAt = i;
         break;
       }
     }
   } else {
-    const cl = Math.max(
+    const ceil = Math.max(
       przHi * 1.015,
-      xP * 1.01
+      xPrice * 1.01
     );
     for (
       let i = start;
-      i < cs.length;
+      i < candles.length;
       i++
     ) {
-      if (cs[i].high > cl) {
+      if (candles[i].high > ceil) {
         brokeAt = i;
         break;
       }
     }
   }
   if (brokeAt === -1) {
-    return [true, true];
+    return { ok: true, active: true };
   }
-  return [
-    brokeAt - dIdx >= 4,
-    false
-  ];
+  const held = brokeAt - dIdx;
+  return {
+    ok: held >= 4,
+    active: false
+  };
 }
 
-function evalXABCD(
+function evalCompleted(
   x,
   a,
   b,
   c,
   d,
-  cs,
+  candles,
   isBack
 ) {
-  const isBull =
-    !x.isHigh && a.isHigh;
+  const isBull = !x.isHigh && a.isHigh;
   if (isBull) {
-    const ok =
-      a.isHigh &&
-      !b.isHigh &&
-      c.isHigh &&
-      !d.isHigh &&
-      a.price > c.price &&
+    const ok = a.isHigh &&
+      !b.isHigh && c.isHigh &&
+      !d.isHigh && a.price > c.price &&
       c.price > b.price &&
       b.price > d.price;
     if (!ok) return null;
   } else {
-    const ok =
-      !a.isHigh &&
-      b.isHigh &&
-      !c.isHigh &&
-      d.isHigh &&
-      a.price < c.price &&
+    const ok = !a.isHigh &&
+      b.isHigh && !c.isHigh &&
+      d.isHigh && a.price < c.price &&
       c.price < b.price &&
       b.price < d.price;
     if (!ok) return null;
@@ -2672,128 +2943,83 @@ function evalXABCD(
   const ad = Math.abs(
     d.price - a.price
   );
-  if (xa <= 0 || ab <= 0 || bc <= 0) {
+  if (xa <= 0 || ab <= 0 ||
+    bc <= 0) {
     return null;
   }
   const abR = ab / xa;
   const adR = ad / xa;
-  let nm = "";
+  let name = "";
   if (
-    abR >= 0.35 &&
-    abR <= 0.54 &&
-    adR >= 0.82 &&
-    adR <= 0.94
+    abR >= 0.35 && abR <= 0.54 &&
+    adR >= 0.82 && adR <= 0.94
   ) {
-    nm = isBull
+    name = isBull
       ? "看漲蝙蝠形態"
       : "看跌蝙蝠形態";
   } else if (
-    abR >= 0.55 &&
-    abR <= 0.68 &&
-    adR >= 0.73 &&
-    adR <= 0.84
+    abR >= 0.55 && abR <= 0.68 &&
+    adR >= 0.73 && adR <= 0.84
   ) {
-    nm = isBull
+    name = isBull
       ? "看漲伽利222"
       : "看跌伽利222";
   } else {
     const cd = Math.abs(
       d.price - c.price
     );
-    const cdAb = cd / ab;
-    if (
-      cdAb >= 0.88 &&
-      cdAb <= 1.35
-    ) {
-      nm = isBull
+    if (cd / ab >= 0.88 &&
+      cd / ab <= 1.35) {
+      name = isBull
         ? "看漲ABCD形態"
         : "看跌ABCD形態";
     }
   }
-  if (!nm) return null;
+  if (!name) return null;
   const przLo = d.price * 0.985;
   const przHi = d.price * 1.015;
-  const chk = checkCompValid(
-    cs,
+  const chk = checkCompletedValid(
+    candles,
     d.index,
     isBull,
     x.price,
     przLo,
     przHi
   );
-  if (!chk[0]) return null;
-  return [
-    {
-      name:
-        nm + (isBack ? "(回溯)" : ""),
+  if (!chk.ok) return null;
+
+  const fullName = isBack
+    ? name + "(回溯)" : name;
+  return {
+    active: chk.active,
+    pat: {
+      name: fullName,
       isBull,
-      isComp: true,
-      nodes: [x, a, b, c, d],
+      done: true,
+      nodes: [
+        { l: "X", ...x },
+        { l: "A", ...a },
+        { l: "B", ...b },
+        { l: "C", ...c },
+        { l: "D", ...d }
+      ],
       przLo,
       przHi,
       dIdx: d.index,
       dDate: d.date
-    },
-    chk[1]
-  ];
-}
-
-function checkProjValid(
-  cs,
-  fromI,
-  isBull,
-  xP,
-  bP,
-  cP,
-  przLo,
-  przHi,
-  extLim
-) {
-  for (
-    let i = fromI;
-    i < cs.length;
-    i++
-  ) {
-    const bar = cs[i];
-    if (isBull) {
-      const fl = Math.min(
-        przLo,
-        extLim
-      );
-      if (
-        bar.low < fl ||
-        bar.low < xP ||
-        bar.high > cP
-      ) {
-        return false;
-      }
-    } else {
-      const cl = Math.max(
-        przHi,
-        extLim
-      );
-      if (
-        bar.low < bP ||
-        bar.low < cP ||
-        bar.high > cl ||
-        bar.high > xP
-      ) {
-        return false;
-      }
     }
-  }
-  return true;
+  };
 }
 
-function projFromXABC(
+function projectXABC(
   x,
   a,
   b,
   c,
-  cs,
+  candles,
   lastI,
   lastD,
-  stepD
+  stepDays
 ) {
   const xa = Math.abs(
     a.price - x.price
@@ -2801,27 +3027,27 @@ function projFromXABC(
   const ab = Math.abs(
     b.price - a.price
   );
-  if (xa <= 0 || ab <= 0) return null;
+  if (xa <= 0 || ab <= 0) {
+    return null;
+  }
   const abR = ab / xa;
-  const isBull =
-    !x.isHigh && a.isHigh;
-  let nm = "";
+  const isBull = !x.isHigh && a.isHigh;
+  let name = "";
   let bcR = 1.272;
   if (abR >= 0.35 && abR <= 0.54) {
-    nm = isBull
+    name = isBull
       ? "潛在看漲蝙蝠222"
       : "潛在看跌蝙蝠222";
     bcR = 1.618;
   } else if (
-    abR >= 0.55 &&
-    abR <= 0.72
+    abR >= 0.55 && abR <= 0.72
   ) {
-    nm = isBull
+    name = isBull
       ? "潛在看漲伽利222"
       : "潛在看跌伽利222";
     bcR = 1.272;
   } else {
-    nm = isBull
+    name = isBull
       ? "潛在看漲ABCD"
       : "潛在看跌ABCD";
     bcR = 1.272;
@@ -2831,921 +3057,555 @@ function projFromXABC(
   let ext1618 = 0;
   if (isBull) {
     const cb = c.price - b.price;
-    if (
-      !(
-        a.isHigh &&
-        !b.isHigh &&
-        c.isHigh &&
-        cb > 0
-      )
-    ) {
+    if (!a.isHigh || b.isHigh ||
+      !c.isHigh || cb <= 0) {
       return null;
     }
     dP = c.price - bcR * cb;
     ext1618 = c.price - 1.618 * cb;
-    if (
-      !(
-        dP > 0 &&
-        a.price > c.price &&
-        c.price > b.price &&
-        b.price > dP
-      )
-    ) {
+    if (dP <= 0 ||
+      a.price <= c.price ||
+      c.price <= b.price ||
+      b.price <= dP) {
       return null;
     }
   } else {
     const bc = b.price - c.price;
-    if (
-      !(
-        !a.isHigh &&
-        b.isHigh &&
-        !c.isHigh &&
-        bc > 0
-      )
-    ) {
+    if (a.isHigh || !b.isHigh ||
+      c.isHigh || bc <= 0) {
       return null;
     }
     dP = c.price + bcR * bc;
     ext1618 = c.price + 1.618 * bc;
-    if (
-      !(
-        a.price < c.price &&
-        c.price < b.price &&
-        b.price < dP
-      )
-    ) {
+    if (a.price >= c.price ||
+      c.price >= b.price ||
+      b.price >= dP) {
       return null;
     }
   }
 
   const przLo = dP * 0.985;
   const przHi = dP * 1.015;
-  if (
-    !checkProjValid(
-      cs,
-      c.index + 1,
-      isBull,
-      x.price,
-      b.price,
-      c.price,
-      przLo,
-      przHi,
-      ext1618
-    )
+  for (
+    let i = c.index + 1;
+    i < candles.length;
+    i++
   ) {
-    return null;
+    const bar = candles[i];
+    if (isBull) {
+      const floor = Math.min(
+        przLo,
+        ext1618
+      );
+      if (bar.low < floor ||
+        bar.low < x.price ||
+        bar.high > c.price) {
+        return null;
+      }
+    } else {
+      const ceil = Math.max(
+        przHi,
+        ext1618
+      );
+      if (bar.low < b.price ||
+        bar.low < c.price ||
+        bar.high > ceil ||
+        bar.high > x.price) {
+        return null;
+      }
+    }
   }
 
-  const abB = Math.max(
+  const abBars = Math.max(
     3,
     b.index - a.index
   );
   const tIdx = Math.max(
     lastI + 1,
-    c.index + abB
+    c.index + abBars
   );
-  const est =
-    lastD +
-    (tIdx - lastI) *
-      stepD *
-      86400000;
+  const estD = addDays(
+    lastD,
+    (tIdx - lastI) * stepDays
+  );
   const dNode = {
     index: tIdx,
-    date: est,
+    date: estD,
     price: dP,
     isHigh: !isBull
   };
   return {
-    name: nm,
+    name,
     isBull,
-    isComp: false,
-    nodes: [x, a, b, c, dNode],
+    done: false,
+    nodes: [
+      { l: "X", ...x },
+      { l: "A", ...a },
+      { l: "B", ...b },
+      { l: "C", ...c },
+      { l: "D", ...dNode }
+    ],
     przLo,
     przHi,
     dIdx: tIdx,
-    dDate: est
+    dDate: estD
   };
 }
 
 function detectHarmonics(
-  cs,
+  candles,
   swings,
   iv
 ) {
   const n = swings.length;
-  if (n < 4 || !cs.length) {
+  if (n < 4 || !candles.length) {
     return null;
   }
-  const lastI = cs.length - 1;
-  const lastD = cs[lastI].date;
-  const stepD = approxDays(iv);
-  const maxSh = Math.min(18, n - 4);
-  let fb = null;
+  const lastI = candles.length - 1;
+  const lastD = candles[lastI].date;
+  const step = iv === "1mo"
+    ? 30.44
+    : (iv === "1wk"
+      ? 7.0
+      : (isIntraIv(iv) ? 0.08 : 1.45));
+  const maxShift = Math.min(
+    18,
+    n - 4
+  );
+  let fallback = null;
 
   for (
-    let sh = 0;
-    sh <= maxSh;
-    sh++
+    let shift = 0;
+    shift <= maxShift;
+    shift++
   ) {
-    const endP = n - 1 - sh;
-    const isBack = sh > 0;
-    if (endP >= 4) {
-      const hit = evalXABCD(
-        swings[endP - 4],
-        swings[endP - 3],
-        swings[endP - 2],
-        swings[endP - 1],
-        swings[endP],
-        cs,
+    const endPos = n - 1 - shift;
+    const isBack = shift > 0;
+    if (endPos >= 4) {
+      const hit = evalCompleted(
+        swings[endPos - 4],
+        swings[endPos - 3],
+        swings[endPos - 2],
+        swings[endPos - 1],
+        swings[endPos],
+        candles,
         isBack
       );
       if (hit) {
-        if (hit[1]) return hit[0];
-        if (!fb) fb = hit[0];
+        if (hit.active) {
+          return hit.pat;
+        }
+        if (!fallback) {
+          fallback = hit.pat;
+        }
       }
     }
-    if (sh === 0) {
-      const proj = projFromXABC(
+    if (shift === 0) {
+      const proj = projectXABC(
         swings[n - 4],
         swings[n - 3],
         swings[n - 2],
         swings[n - 1],
-        cs,
+        candles,
         lastI,
         lastD,
-        stepD
+        step
       );
       if (proj) return proj;
     }
   }
-  return fb;
-}
-
-function calcMechStop(
-  cs,
-  mSwings,
-  isUp,
-  iv
-) {
-  const last = cs[cs.length - 1];
-  const intra = isIntraIv(iv);
-  const dUp = intra ? 0.985 : 0.96;
-  const dDn = intra ? 1.015 : 1.04;
-  const dLbl = intra
-    ? "日內1.5%窄幅硬性止損"
-    : "江恩4%標準保護止損";
-
-  let stUp = 0;
-  let stDn = 0;
-  for (
-    let i = cs.length - 1;
-    i > 0;
-    i--
-  ) {
-    const c = cs[i];
-    const p = cs[i - 1];
-    if (
-      c.high > p.high &&
-      c.low >= p.low &&
-      stDn === 0
-    ) {
-      stUp++;
-    } else if (
-      c.low < p.low &&
-      c.high <= p.high &&
-      stUp === 0
-    ) {
-      stDn++;
-    } else {
-      break;
-    }
-  }
-  const mid =
-    (last.high + last.low) / 2;
-  if (isUp) {
-    if (stUp >= 7) {
-      return [
-        last.low * 0.996,
-        "連續" +
-          stUp +
-          "期單邊(7期法則收緊止損)"
-      ];
-    }
-    const pH =
-      cs.length >= 2
-        ? cs[cs.length - 2].high
-        : last.high;
-    if (
-      last.high > pH &&
-      last.close < last.open &&
-      last.close < mid
-    ) {
-      return [
-        last.low * 0.996,
-        "出現三重信號頂部(破低即離場)"
-      ];
-    }
-    const loPt = [...mSwings]
-      .reverse()
-      .find(
-        s =>
-          !s.isHigh &&
-          s.price < last.close
-      );
-    if (loPt) {
-      return [
-        loPt.price * 0.995,
-        "機械擺動底(" +
-          fmtDate(loPt.date, intra) +
-          ")"
-      ];
-    }
-    return [last.close * dUp, dLbl];
-  } else {
-    if (stDn >= 7) {
-      return [
-        last.high * 1.004,
-        "連續" +
-          stDn +
-          "期單邊(7期法則收緊止損)"
-      ];
-    }
-    const pL =
-      cs.length >= 2
-        ? cs[cs.length - 2].low
-        : last.low;
-    if (
-      last.low < pL &&
-      last.close > last.open &&
-      last.close > mid
-    ) {
-      return [
-        last.high * 1.004,
-        "出現三重信號底部(升破即平倉)"
-      ];
-    }
-    const hiPt = [...mSwings]
-      .reverse()
-      .find(
-        s =>
-          s.isHigh &&
-          s.price > last.close
-      );
-    if (hiPt) {
-      return [
-        hiPt.price * 1.005,
-        "機械擺動頂(" +
-          fmtDate(hiPt.date, intra) +
-          ")"
-      ];
-    }
-    return [last.close * dDn, dLbl];
-  }
-}
-
-function calcOverbalance(
-  cs,
-  swings,
-  isUp,
-  iv,
-  tMode
-) {
-  if (swings.length < 4) {
-    return "波段數據累積中，平衡正常";
-  }
-  const last = cs[cs.length - 1];
-  const u = unitName(iv);
-  let maxDp = 0;
-  let maxDt = 0;
-  for (
-    let i = 1;
-    i < swings.length;
-    i++
-  ) {
-    const a = swings[i - 1];
-    const b = swings[i];
-    const dt = Math.abs(
-      barTimeDelta(
-        cs,
-        a.index,
-        b.index,
-        iv,
-        tMode
-      )
-    );
-    if (
-      isUp &&
-      a.isHigh &&
-      !b.isHigh
-    ) {
-      maxDp = Math.max(
-        maxDp,
-        a.price - b.price
-      );
-      maxDt = Math.max(maxDt, dt);
-    } else if (
-      !isUp &&
-      !a.isHigh &&
-      b.isHigh
-    ) {
-      maxDp = Math.max(
-        maxDp,
-        b.price - a.price
-      );
-      maxDt = Math.max(maxDt, dt);
-    }
-  }
-  const tail =
-    swings[swings.length - 1];
-  if (maxDp <= 0) {
-    return "時空平衡維持正常";
-  }
-  const curDt = Math.abs(
-    barTimeDelta(
-      cs,
-      tail.index,
-      last.id,
-      iv,
-      tMode
-    )
-  );
-  const curDp = isUp
-    ? Math.max(
-      0,
-      tail.price - last.low
-    )
-    : Math.max(
-      0,
-      last.high - tail.price
-    );
-  const pOv = curDp > maxDp;
-  const tOv =
-    curDt > maxDt &&
-    curDp > maxDp * 0.5;
-  if (pOv || tOv) {
-    return (
-      "⚠️已觸發平衡超越！當前回調" +
-      fmt(curDp) +
-      "(" +
-      curDt.toFixed(0) +
-      u +
-      ")已超前浪極值" +
-      fmt(maxDp) +
-      "(" +
-      maxDt.toFixed(0) +
-      u +
-      ")，防範反轉"
-    );
-  }
-  return (
-    "平衡正常（前浪最大回調" +
-    fmt(maxDp) +
-    "/" +
-    maxDt.toFixed(0) +
-    u +
-    "，當前" +
-    fmt(curDp) +
-    "/" +
-    curDt.toFixed(0) +
-    u +
-    "）"
-  );
-}
-
-function calcVolumeDiag(cs) {
-  const valid = cs.filter(
-    c => c.volume > 0
-  );
-  if (valid.length < 60) {
-    return "指數/無成交量數據，略過量能";
-  }
-  const rec50 = cs
-    .slice(-50)
-    .reduce(
-      (a, b) => a + b.volume,
-      0
-    );
-  const prev50 = cs
-    .slice(-100, -50)
-    .reduce(
-      (a, b) => a + b.volume,
-      0
-    );
-  const ySub = cs.slice(-250);
-  let maxV = 1;
-  for (const c of ySub) {
-    if (c.volume > maxV) {
-      maxV = c.volume;
-    }
-  }
-  const curV =
-    cs[cs.length - 1].volume;
-  const shrink = curV / maxV;
-  const tags = [];
-  if (prev50 > 0) {
-    const r = rec50 / prev50;
-    if (r >= 2.0) {
-      tags.push(
-        "50期吸籌動量比 " +
-          r.toFixed(2) +
-          "x(>2.0主力放量)"
-      );
-    } else {
-      tags.push(
-        "50期量能動量比 " +
-          r.toFixed(2) +
-          "x"
-      );
-    }
-  }
-  if (shrink > 0 && shrink <= 0.25) {
-    tags.push(
-      "當前量僅區間峰值" +
-        Math.round(shrink * 100) +
-        "%（地量見地價特徵）"
-    );
-  }
-  return tags.join("；");
-}
-
-function calcDailyGuide(
-  dCs,
-  iv,
-  isUpFan
-) {
-  if (!isIntraIv(iv)) return "";
-  if (dCs.length < 20) {
-    return "日線定方向：載入日線結構中";
-  }
-  const dSw = detectSwings(
-    dCs,
-    "1d"
-  );
-  const dAnc = pickAnchor(
-    dCs,
-    dSw,
-    null,
-    "auto"
-  );
-  const dUp = !dAnc.isHigh;
-  const dVol = calcVol(
-    dCs,
-    dAnc,
-    dSw,
-    "1d",
-    "trading"
-  );
-  const lastD = dCs[dCs.length - 1];
-  const dt = lastD.id - dAnc.index;
-  const s = dUp ? 1 : -1;
-  const p1 = Math.max(
-    0,
-    dAnc.price + s * dVol * dt
-  );
-  const above = lastD.close >= p1;
-  const dTxt = above
-    ? "日線多頭強勢(1x1上方)"
-    : "日線空頭弱勢(1x1下方)";
-  const align =
-    above === isUpFan
-      ? "順應日線主趨勢"
-      : "⚠️逆日線主方向(僅作短線反抽)";
-  return dTxt + "｜" + align;
+  return fallback;
 }
 
 function runAnalysis() {
-  const cs = st.candles;
-  if (cs.length < 20) return;
-  const iv = st.interval;
-  const intra = isIntraIv(iv);
-  const effMode = intra
-    ? "trading" : st.timeMode;
-
-  const swings = detectSwings(cs, iv);
-  const mSwings = buildMechSwings(
-    cs,
+  if (st.candles.length < 20) return;
+  const effTm = isIntraIv(
+    st.interval
+  ) ? "trading" : st.timeMode;
+  const swings = detectSwings(
+    st.candles,
+    st.interval
+  );
+  const mechSwings = buildMechSwings(
+    st.candles,
     2
   );
-  const anc = pickAnchor(
-    cs,
+  const anchor = pickAnchor(
+    st.candles,
     swings,
     st.customAnc,
     st.dir
   );
-  const isUp =
-    st.dir === "up"
-      ? true
-      : (st.dir === "down"
-        ? false : !anc.isHigh);
-  const bVol = calcVol(
-    cs,
-    anc,
+  let isUp = !anchor.isHigh;
+  if (st.dir === "up") isUp = true;
+  if (st.dir === "down") isUp = false;
+  const baseVol = calcVolatility(
+    st.candles,
+    anchor,
     swings,
-    iv,
-    effMode
+    st.interval,
+    effTm
   );
   const vol = Math.max(
     0.0001,
-    bVol * st.volMult
+    baseVol * st.volMult
   );
-  const lastI = cs.length - 1;
-  const endIdx =
-    lastI + st.horizon;
+  const lastI =
+    st.candles.length - 1;
+  const endI = lastI + st.horizon;
   const rays = buildRays(
-    cs,
-    anc,
+    st.candles,
+    anchor,
     isUp,
     vol,
-    endIdx,
-    iv,
-    effMode
+    endI,
+    st.interval,
+    effTm
   );
   const hits = calcTimeHits(
-    cs,
-    anc,
+    st.candles,
+    anchor,
     swings,
     vol,
     st.horizon,
-    iv,
-    effMode
+    st.interval,
+    effTm
   );
-  const { fibs, pcts, gm } =
-    calcFibsAndGrid(cs);
+  const fibs = calcFibs(
+    st.candles,
+    swings
+  );
+  const pctObj = calcGannPct(
+    st.candles
+  );
   const harm = detectHarmonics(
-    cs,
+    st.candles,
     swings,
-    iv
+    st.interval
   );
   const stopInfo = calcMechStop(
-    cs,
-    mSwings,
+    st.candles,
+    mechSwings,
     isUp,
-    iv
+    st.interval
   );
   const obMsg = calcOverbalance(
-    cs,
+    st.candles,
     swings,
     isUp,
-    iv,
-    effMode
+    st.interval,
+    effTm
   );
-  const volMsg = calcVolumeDiag(cs);
+  const volMsg = calcVolumeDiag(
+    st.candles
+  );
   const dailyHint = calcDailyGuide(
     st.dailyCandles,
-    iv,
+    st.interval,
     isUp
   );
-
-  const last = cs[lastI];
-  const dtNow = barTimeDelta(
-    cs,
-    anc.index,
-    last.id,
-    iv,
-    effMode
-  );
-  const sign = isUp ? 1 : -1;
-  const p1x1 = Math.max(
-    0,
-    anc.price + sign * vol * dtNow
-  );
-  const posH =
-    last.close >= p1x1
-      ? "位於 1x1(45度) 強勢線上方"
-      : "處於 1x1(45度) 弱勢線下方";
-  const dirTxt = isUp
-    ? "上升" : "下跌";
-  const modeNm =
-    st.dir === "up"
-      ? "向上"
-      : (st.dir === "down"
-        ? "向下" : "自動");
-  const tTag = intra
-    ? "交易K線連續"
-    : (effMode === "calendar"
-      ? "自然日" : "交易日");
-  const uNm =
-    effMode === "calendar" &&
-    iv === "1d"
-      ? "自然日" : unitName(iv);
-  const titleF = st.name
-    ? st.code + " " + st.name
-    : st.code;
-
-  const rep = [];
-  rep.push("【江恩時空推演報告】");
-  rep.push("標的：" + titleF);
-  rep.push(
-    "維度：" +
-      ivTitle(iv) +
-      "(" +
-      tTag +
-      ") | 現價：" +
-      fmt(last.close)
-  );
-  if (dailyHint) {
-    rep.push(
-      "多週期過濾：" + dailyHint
-    );
-  }
-  rep.push(
-    "起點：" +
-      fmtDate(anc.date, intra) +
-      " (" +
-      fmt(anc.price) +
-      ")"
-  );
-  rep.push(
-    "角度方向：" +
-      dirTxt +
-      "江恩線(" +
-      modeNm +
-      ")"
-  );
-  rep.push(
-    "獨立波動率：" +
-      fmt(vol) +
-      "/" +
-      uNm
-  );
-  rep.push(
-    "1x1主線現值：" + fmt(p1x1)
-  );
-  rep.push("強弱診斷：" + posH);
-  rep.push("平衡超越：" + obMsg);
-  rep.push("量能結構：" + volMsg);
-  rep.push("");
-  rep.push(
-    intra
-      ? "【日內圓周與短線轉勢窗口】"
-      : "【大級別圓周與轉勢窗口】"
-  );
-
-  const majHits = hits.filter(
-    h => h.isMajor
-  );
-  const showH = majHits.length
-    ? majHits.slice(0, 3)
-    : hits.slice(0, 3);
-  if (showH.length === 0) {
-    rep.push(
-      "延伸期內暫無重大轉勢共振"
-    );
-  } else {
-    for (const h of showH) {
-      const dtFut = barTimeDelta(
-        cs,
-        anc.index,
-        h.targetIndex,
-        iv,
-        effMode
-      );
-      const t1 = Math.max(
-        0,
-        anc.price +
-          sign * vol * dtFut
-      );
-      const t2 = Math.max(
-        0,
-        anc.price +
-          sign * vol * 2 * dtFut
-      );
-      const t3 = Math.max(
-        0,
-        anc.price +
-          sign * vol * 0.5 * dtFut
-      );
-      const tag = h.isMajor
-        ? "★核心轉折" : "轉勢窗";
-      rep.push(
-        tag +
-          "：" +
-          fmtDate(h.estDate, intra)
-      );
-      rep.push(
-        "共振因數：" +
-          h.reasons.join("+")
-      );
-      rep.push(
-        "屆時1x1目標價：" + fmt(t1)
-      );
-      rep.push(
-        "強弱區間：" +
-          fmt(t3) +
-          " ~ " +
-          fmt(t2)
-      );
-    }
-  }
-
-  rep.push("");
-  rep.push(
-    "【江恩八分位與幾何中項】"
-  );
-  for (const p of pcts) {
-    if (p.isMajor) {
-      rep.push(
-        p.label +
-          "：" +
-          fmt(p.price)
-      );
-    }
-  }
-  rep.push(
-    "幾何和諧中項√(H×L)：" +
-      fmt(gm)
-  );
-
-  rep.push("");
-  rep.push("【黃金比率匯聚位】");
-  for (const f of fibs.slice(0, 4)) {
-    rep.push(
-      f.label +
-        "：" +
-        fmt(f.price)
-    );
-  }
-
-  rep.push("");
-  rep.push("【和諧形態掃描】");
-  if (harm) {
-    const stTxt = harm.isComp
-      ? "已成型反轉" : "推演完成中";
-    rep.push(
-      "形態：" +
-        harm.name +
-        "(" +
-        stTxt +
-        ")"
-    );
-    rep.push(
-      "D點轉勢窗口：" +
-        fmtDate(harm.dDate, intra)
-    );
-    rep.push(
-      "目標反轉區：" +
-        fmt(harm.przLo) +
-        " ~ " +
-        fmt(harm.przHi)
-    );
-  } else {
-    rep.push(
-      "當前處於單邊趨勢延伸中，" +
-        "暫無有效" +
-        ivTitle(iv) +
-        "和諧形態"
-    );
-  }
-
-  rep.push("");
-  rep.push("【江恩機械擺動風控】");
-  rep.push(
-    "動態機械止損：" +
-      fmt(stopInfo[0])
-  );
-  rep.push(
-    "止損依據：" + stopInfo[1]
-  );
-  rep.push(
-    intra
-      ? "短線鐵則：嚴禁過度交易，" +
-        "單筆風險控管於2%~5%內"
-      : "資金控管：單筆不超總資金10%"
-  );
-
   st.res = {
-    anc,
+    anchor,
     isUp,
     vol,
-    effMode,
     rays,
     hits,
     fibs,
-    pcts,
+    pcts: pctObj.levels,
+    gm: pctObj.gm,
     harm,
-    mSwings,
+    mechSwings,
     stopInfo,
-    report: rep.join("\n")
+    obMsg,
+    volMsg,
+    dailyHint,
+    effTm
   };
+  updateCards();
+  drawChart();
+}
+
+function updateCards() {
+  const r = st.res;
+  if (!r) return;
+  const last =
+    st.candles[st.candles.length - 1];
+  const isIntra = isIntraIv(
+    st.interval
+  );
+  const dtNow = barTimeDelta(
+    st.candles,
+    r.anchor.index,
+    last.id,
+    st.interval,
+    r.effTm
+  );
+  const sign = r.isUp ? 1 : -1;
+  const p1x1 = Math.max(
+    0,
+    r.anchor.price +
+      sign * r.vol * dtNow
+  );
+  const pos = last.close >= p1x1
+    ? "位於 1x1(45度) 強勢線上方"
+    : "處於 1x1(45度) 弱勢線下方";
+  const unit = unitNameOf(
+    st.interval,
+    r.effTm
+  );
+  const tModeTag = isIntra
+    ? "交易K線連續"
+    : (r.effTm === "calendar"
+      ? "自然日" : "交易日");
+  const titleFull = st.name
+    ? st.code + " " + st.name
+    : st.code;
 
   document.getElementById(
     "turnCardTitle"
-  ).textContent = intra
+  ).textContent = isIntra
     ? "日內圓周與短線轉勢窗口"
     : "大級別圓周與轉勢窗口";
-  const dBadge =
-    document.getElementById(
-      "dailyHintBadge"
-    );
-  if (dailyHint) {
-    dBadge.textContent = dailyHint;
+
+  const dBadge = document.getElementById(
+    "dailyHintBadge"
+  );
+  if (r.dailyHint) {
+    dBadge.textContent = r.dailyHint;
     dBadge.style.display = "block";
   } else {
     dBadge.style.display = "none";
   }
 
-  const topHit = showH[0];
-  const badge =
-    document.getElementById(
-      "turnBadge"
-    );
-  if (topHit) {
+  document.getElementById(
+    "repTitle"
+  ).textContent =
+    titleFull + " 江恩策略建議";
+
+  const majHit = r.hits.find(
+    h => h.isMajor
+  );
+  const h0 = majHit || r.hits[0];
+  const badge = document.getElementById(
+    "turnBadge"
+  );
+  if (h0) {
     badge.style.display =
-      topHit.isMajor
-        ? "block" : "none";
+      h0.isMajor ? "block" : "none";
+    const dtFut = barTimeDelta(
+      st.candles,
+      r.anchor.index,
+      h0.targetIndex,
+      st.interval,
+      r.effTm
+    );
+    const tp = Math.max(
+      0,
+      r.anchor.price +
+        sign * r.vol * dtFut
+    );
     document.getElementById(
       "turnDate"
-    ).textContent =
-      "預計時間：" +
-      fmtDate(topHit.estDate, intra);
+    ).textContent = "預計時間：" +
+      fmtDate(h0.estDate, isIntra);
     document.getElementById(
       "turnWhy"
-    ).textContent =
-      "共振原因：" +
-      topHit.reasons.join(" + ");
-    const dtFut = barTimeDelta(
-      cs,
-      anc.index,
-      topHit.targetIndex,
-      iv,
-      effMode
-    );
-    const p1 = Math.max(
-      0,
-      anc.price + sign * vol * dtFut
-    );
+    ).textContent = "共振原因：" +
+      h0.reasons.join(" + ");
     document.getElementById(
       "turnPrice"
     ).textContent =
-      "屆時 1x1 目標價：" + fmt(p1);
+      "屆時 1x1 目標價：" + fmt(tp);
   } else {
     badge.style.display = "none";
     document.getElementById(
       "turnDate"
-    ).textContent = "暫無強共振";
+    ).textContent = "延伸期內暫無強共振";
     document.getElementById(
       "turnWhy"
-    ).textContent = "--";
+    ).textContent =
+      "可拉長延伸觀察大周期";
     document.getElementById(
       "turnPrice"
     ).textContent = "--";
   }
 
-  const hBadge =
-    document.getElementById(
-      "harmBadge"
-    );
-  if (harm) {
+  const hBadge = document.getElementById(
+    "harmBadge"
+  );
+  const locBtn = document.getElementById(
+    "btnLocHarm"
+  );
+  if (r.harm) {
+    const isBack =
+      r.harm.name.includes("回溯");
     hBadge.style.display =
-      harm.name.includes("回溯")
-        ? "block" : "none";
+      isBack ? "block" : "none";
+    locBtn.style.display =
+      st.showHarm
+        ? "inline-block" : "none";
     document.getElementById(
       "harmName"
     ).textContent =
-      "形態：" + harm.name;
+      "形態：" + r.harm.name;
     document.getElementById(
       "harmDate"
-    ).textContent =
-      "D點時間窗口：" +
-      fmtDate(harm.dDate, intra);
+    ).textContent = "D點時間窗口：" +
+      fmtDate(r.harm.dDate, isIntra);
     document.getElementById(
       "harmPrz"
-    ).textContent =
-      "反轉目標區：" +
-      fmt(harm.przLo) +
-      " ~ " +
-      fmt(harm.przHi);
+    ).textContent = "反轉目標區：" +
+      fmt(r.harm.przLo) + " ~ " +
+      fmt(r.harm.przHi);
   } else {
     hBadge.style.display = "none";
-    const tip =
-      iv === "1d"
-        ? "（建議切換週線或小時圖檢視）"
-        : "（建議切換其他週期檢視結構）";
+    locBtn.style.display = "none";
     document.getElementById(
       "harmName"
     ).textContent =
       "當前處於單邊趨勢延伸中，" +
       "暫無有效" +
-      ivTitle(iv) +
-      "和諧形態" +
-      tip;
+      ivTitle(st.interval) +
+      "和諧形態";
     document.getElementById(
       "harmDate"
-    ).textContent = "--";
+    ).textContent =
+      "（建議切換其他週期檢視結構）";
     document.getElementById(
       "harmPrz"
     ).textContent = "--";
   }
 
-  document.getElementById(
-    "repTitle"
-  ).textContent =
-    titleF + " 江恩策略建議";
+  const dirTxt =
+    st.dir === "up"
+      ? "向上(手動)"
+      : (st.dir === "down"
+        ? "向下(手動)"
+        : (r.isUp
+          ? "上升(自動)"
+          : "下跌(自動)"));
+
+  const lines = [
+    "【江恩時空推演報告】",
+    "標的：" + titleFull,
+    "維度：" + ivTitle(st.interval) +
+      "(" + tModeTag + ") | 現價：" +
+      fmt(last.close)
+  ];
+  if (r.dailyHint) {
+    lines.push(
+      "多週期過濾：" + r.dailyHint
+    );
+  }
+  lines.push(
+    "起點：" +
+      fmtDate(
+        r.anchor.date,
+        isIntra
+      ) + " (" +
+      fmt(r.anchor.price) + ")",
+    "角度方向：" + dirTxt,
+    "獨立波動率：" +
+      fmt(r.vol) + "/" + unit,
+    "1x1主線現值：" + fmt(p1x1),
+    "強弱診斷：" + pos,
+    "平衡超越：" + r.obMsg,
+    "量能結構：" + r.volMsg,
+    "",
+    isIntra
+      ? "【日內圓周與短線轉勢窗口】"
+      : "【大級別圓周與轉勢窗口】"
+  );
+  const showH = majHit
+    ? r.hits
+      .filter(h => h.isMajor)
+      .slice(0, 3)
+    : r.hits.slice(0, 3);
+  if (!showH.length) {
+    lines.push("延伸期內暫無重大共振");
+  } else {
+    for (const h of showH) {
+      const dtF = barTimeDelta(
+        st.candles,
+        r.anchor.index,
+        h.targetIndex,
+        st.interval,
+        r.effTm
+      );
+      const t1 = Math.max(
+        0,
+        r.anchor.price +
+          sign * r.vol * dtF
+      );
+      const t2 = Math.max(
+        0,
+        r.anchor.price +
+          sign * r.vol * 2 * dtF
+      );
+      const t3 = Math.max(
+        0,
+        r.anchor.price +
+          sign * r.vol * 0.5 * dtF
+      );
+      const tag = h.isMajor
+        ? "★核心轉折：" : "轉勢窗：";
+      lines.push(
+        tag + fmtDate(
+          h.estDate,
+          isIntra
+        ),
+        "共振因數：" +
+          h.reasons.join("+"),
+        "屆時1x1目標價：" + fmt(t1),
+        "強弱區間：" +
+          fmt(t3) + " ~ " + fmt(t2)
+      );
+    }
+  }
+  lines.push(
+    "",
+    "【江恩八分位與幾何中項】"
+  );
+  for (const p of r.pcts) {
+    if (p.isMajor) {
+      lines.push(
+        p.label + "：" + fmt(p.price)
+      );
+    }
+  }
+  lines.push(
+    "幾何和諧中項√(H×L)：" +
+      fmt(r.gm),
+    "",
+    "【黃金比率匯聚位】"
+  );
+  const confs = r.fibs.filter(
+    f => f.conf
+  );
+  const sf = confs.length
+    ? confs : r.fibs.slice(0, 3);
+  for (const f of sf) {
+    lines.push(
+      f.label + "：" +
+      fmt(f.price) +
+      (f.conf ? " (雙重匯聚)" : "")
+    );
+  }
+  lines.push(
+    "",
+    "【機械擺動動態風控】",
+    "動態止損位：" +
+      fmt(r.stopInfo.price),
+    "止損依據：" +
+      r.stopInfo.reason,
+    isIntra
+      ? "短線鐵則：嚴禁過度交易，" +
+        "單筆風險控管於2%~5%內"
+      : "資金控管：單筆不超總資金10%"
+  );
   document.getElementById(
     "repBody"
-  ).textContent = st.res.report;
-
-  drawChart();
+  ).textContent = lines.join("\n");
 }
 
 function getVisRange() {
@@ -3765,7 +3625,13 @@ function getVisRange() {
     endB - winL
   );
   const endH = Math.min(endB, lastH);
-  return { startB, endH, endB };
+  return {
+    startB,
+    endH,
+    endB,
+    maxE,
+    winL
+  };
 }
 
 function maxPanLimit() {
@@ -3779,31 +3645,14 @@ function maxPanLimit() {
   return Math.max(0, maxE - winL);
 }
 
-function panBackward(step) {
-  const lim = maxPanLimit();
-  st.panOff = Math.min(
-    lim,
-    st.panOff + step
-  );
-}
-
-function panForward(step) {
-  st.panOff = Math.max(
-    0,
-    st.panOff - step
-  );
-}
-
 function focusHarmonic() {
-  if (!st.res || !st.res.harm) {
-    return;
-  }
-  const h = st.res.harm;
-  const xIdx = h.nodes[0].index;
-  const dIdx = h.dIdx;
+  const h = st.res?.harm;
+  if (!h || !h.nodes.length) return;
+  const xI = h.nodes[0].index;
+  const dI = h.dIdx;
   const span = Math.max(
     10,
-    dIdx - xIdx
+    dI - xI
   );
   if (span + 24 > st.histBars) {
     st.histBars = Math.min(
@@ -3812,7 +3661,7 @@ function focusHarmonic() {
     );
   }
   const mid = Math.floor(
-    (xIdx + dIdx) / 2
+    (xI + dI) / 2
   );
   const lastH = Math.max(
     0,
@@ -3821,342 +3670,334 @@ function focusHarmonic() {
   const maxE = lastH + st.horizon;
   const winL =
     st.histBars + st.horizon;
-  const desEnd =
+  const desiredE =
     mid + Math.floor(winL / 2);
-  const rawPan = maxE - desEnd;
-  const lim = maxPanLimit();
+  const rawPan = maxE - desiredE;
   st.panOff = Math.max(
     0,
-    Math.min(lim, rawPan)
+    Math.min(maxPanLimit(), rawPan)
   );
-  if (dIdx >= 0 && dIdx <= maxE) {
-    st.selBar = dIdx;
+  if (dI >= 0 && dI <= maxE) {
+    st.selBar = dI;
   }
-  drawChart();
-}
-
-function stepBar(delta) {
-  if (!st.candles.length) return;
-  const lastH =
-    st.candles.length - 1;
-  const maxE = lastH + st.horizon;
-  const cur =
-    st.selBar != null
-      ? st.selBar : lastH;
-  const nxt = Math.max(
-    0,
-    Math.min(maxE, cur + delta)
-  );
-  st.selBar = nxt;
-  const { startB, endB } =
-    getVisRange();
-  const maxP = maxPanLimit();
-  if (nxt < startB) {
-    st.panOff = Math.min(
-      maxP,
-      st.panOff + (startB - nxt)
-    );
-  } else if (nxt > endB) {
-    st.panOff = Math.max(
-      0,
-      st.panOff - (nxt - endB)
-    );
-  }
+  savePrefs();
   drawChart();
 }
 
 function priceAtBar(bar) {
-  const cs = st.candles;
-  if (!cs.length) return 0;
-  if (bar >= 0 && bar < cs.length) {
-    return cs[bar].close;
+  if (!st.candles.length) return 0;
+  if (bar >= 0 &&
+    bar < st.candles.length) {
+    return st.candles[bar].close;
   }
   if (st.res) {
-    const r = st.res;
     const dt = barTimeDelta(
-      cs,
-      r.anc.index,
+      st.candles,
+      st.res.anchor.index,
       bar,
       st.interval,
-      r.effMode
+      st.res.effTm
     );
-    const s = r.isUp ? 1 : -1;
+    const s = st.res.isUp ? 1 : -1;
     return Math.max(
       0,
-      r.anc.price + s * r.vol * dt
+      st.res.anchor.price +
+        s * st.res.vol * dt
     );
   }
-  return cs[cs.length - 1].close;
+  return st.candles[
+    st.candles.length - 1
+  ].close;
+}
+
+function fullDateAtBar(bar) {
+  if (!st.candles.length) {
+    return "--";
+  }
+  const d = dateForIndex(
+    st.candles,
+    bar,
+    st.interval
+  );
+  return fmtDate(
+    d,
+    isIntraIv(st.interval)
+  );
+}
+
+function shortDateAtBar(bar) {
+  const full = fullDateAtBar(bar);
+  if (isIntraIv(st.interval)) {
+    return full;
+  }
+  if (full.length < 10) return full;
+  return st.interval === "1mo"
+    ? full.slice(0, 7)
+    : full.slice(5);
+}
+
+function fmtAxisP(p) {
+  if (p >= 10000) {
+    return p.toFixed(0);
+  }
+  if (p >= 1000) {
+    return p.toFixed(1);
+  }
+  return p.toFixed(2);
+}
+
+function drawRounded(
+  ctx,
+  x,
+  y,
+  w,
+  h,
+  r
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(
+    x + w, y, x + w, y + r
+  );
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(
+    x + w, y + h, x + w - r, y + h
+  );
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(
+    x, y + h, x, y + h - r
+  );
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(
+    x, y, x + r, y
+  );
+  ctx.closePath();
 }
 
 function drawChart() {
-  const cv =
-    document.getElementById("cv");
-  const rect =
-    cv.getBoundingClientRect();
-  if (
-    rect.width < 10 ||
-    rect.height < 10
-  ) {
-    return;
-  }
+  const cv = document.getElementById(
+    "cv"
+  );
   const dpr =
     window.devicePixelRatio || 1;
+  const rect =
+    cv.getBoundingClientRect();
   cv.width = rect.width * dpr;
   cv.height = rect.height * dpr;
   const ctx = cv.getContext("2d");
   ctx.scale(dpr, dpr);
   const W = rect.width;
   const H = rect.height;
-  const rW = 58;
-  const bH = 30;
-  const pW = Math.max(1, W - rW);
-  const pH = Math.max(1, H - bH);
   ctx.clearRect(0, 0, W, H);
+  if (!st.candles.length) return;
 
-  const cs = st.candles;
-  if (!cs.length) return;
-  const intra = isIntraIv(
-    st.interval
+  const rightW = 58;
+  const botH = 30;
+  const plotW = Math.max(
+    1,
+    W - rightW
+  );
+  const plotH = Math.max(
+    1,
+    H - botH
   );
 
-  const {
-    startB,
-    endH,
-    endB
-  } = getVisRange();
-  const lastH = cs.length - 1;
-  const rawSel =
-    st.selBar != null
-      ? st.selBar : lastH;
-  const actB = Math.max(
-    startB,
-    Math.min(endB, rawSel)
-  );
-
-  const bLoc =
-    document.getElementById(
-      "btnLocHarm"
-    );
-  if (
-    st.showHarm &&
-    st.res &&
-    st.res.harm
-  ) {
-    const h = st.res.harm;
-    const xI = h.nodes[0].index;
-    const dI = h.dIdx;
-    const outV =
-      xI < startB || dI > endB;
-    const isBk =
-      h.name.includes("回溯");
-    bLoc.style.display =
-      outV || isBk
-        ? "inline-block" : "none";
-  } else {
-    bLoc.style.display = "none";
-  }
+  const lastH =
+    st.candles.length - 1;
+  const vr = getVisRange();
+  const startB = vr.startB;
+  const endB = vr.endB;
 
   document.getElementById(
     "btnHistBack"
   ).style.display =
     startB > 0
       ? "inline-block" : "none";
+  const hasPan = st.panOff > 0;
   document.getElementById(
     "btnHistFwd"
   ).style.display =
-    st.panOff > 0
+    hasPan
       ? "inline-block" : "none";
   document.getElementById(
     "btnLatest"
   ).style.display =
-    st.panOff > 0
-      ? "inline-block" : "none";
-  document.getElementById(
-    "btnSetAnc"
-  ).style.display =
-    st.selBar != null &&
-    st.selBar < cs.length
+    hasPan
       ? "inline-block" : "none";
 
-  let lo = Infinity;
-  let hi = -Infinity;
+  let minP = Infinity;
+  let maxP = -Infinity;
   for (
     let i = startB;
-    i <= endH;
+    i <= vr.endH;
     i++
   ) {
-    if (cs[i].low < lo) {
-      lo = cs[i].low;
+    if (st.candles[i].low < minP) {
+      minP = st.candles[i].low;
     }
-    if (cs[i].high > hi) {
-      hi = cs[i].high;
+    if (st.candles[i].high > maxP) {
+      maxP = st.candles[i].high;
     }
   }
-  if (
-    st.panOff === 0 &&
-    st.res
-  ) {
+  if (st.panOff === 0 && st.res) {
     const r1 = st.res.rays.find(
-      x => x.isPrimary
+      x => x.primary
     );
     const lp =
-      r1?.points[
-        r1.points.length - 1
-      ];
-    if (
-      lp &&
-      lp.price > 0 &&
-      lp.price < hi * 2.2
-    ) {
-      hi = Math.max(hi, lp.price);
-      lo = Math.min(lo, lp.price);
+      r1.pts[r1.pts.length - 1].p;
+    if (lp > 0 && lp < maxP * 2.2) {
+      maxP = Math.max(maxP, lp);
+      minP = Math.min(minP, lp);
     }
   }
-  if (
-    st.showHarm &&
-    st.res &&
-    st.res.harm
-  ) {
-    const h = st.res.harm;
-    if (
-      h.dIdx >= startB &&
-      h.nodes[0].index <= endB
-    ) {
-      for (const nd of h.nodes) {
-        lo = Math.min(lo, nd.price);
-        hi = Math.max(hi, nd.price);
+  if (st.showHarm &&
+    st.res?.harm) {
+    const hm = st.res.harm;
+    const xI = hm.nodes[0].index;
+    if (hm.dIdx >= startB &&
+      xI <= endB) {
+      for (const nd of hm.nodes) {
+        minP = Math.min(
+          minP,
+          nd.price
+        );
+        maxP = Math.max(
+          maxP,
+          nd.price
+        );
       }
-      lo = Math.min(lo, h.przLo);
-      hi = Math.max(hi, h.przHi);
+      minP = Math.min(
+        minP,
+        hm.przLo
+      );
+      maxP = Math.max(
+        maxP,
+        hm.przHi
+      );
     }
   }
-  if (hi <= lo) hi = lo + 1;
-  const pad = (hi - lo) * 0.08;
-  const minP = Math.max(0, lo - pad);
-  const maxP = hi + pad;
+  if (maxP <= minP) maxP = minP + 1;
+  const pad = (maxP - minP) * 0.08;
+  minP = Math.max(0, minP - pad);
+  maxP += pad;
 
-  const xOf = b => {
-    const sp = Math.max(
-      1,
-      endB - startB
-    );
-    return (
-      ((b - startB) / sp) *
-        (pW - 12) +
-      6
-    );
-  };
-  const yOf = p => {
-    const sp = Math.max(
-      0.0001,
-      maxP - minP
-    );
-    return (
-      pH -
-      ((p - minP) / sp) *
-        (pH - 16) -
-      8
-    );
-  };
-
-  ctx.strokeStyle =
-    "rgba(255,255,255,0.08)";
-  ctx.lineWidth = 0.7;
-  for (let i = 0; i <= 4; i++) {
-    const y =
-      pH -
-      (i / 4) * (pH - 16) -
-      8;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(pW, y);
-    ctx.stroke();
-  }
   const spanB = Math.max(
     1,
     endB - startB
   );
-  for (let i = 1; i <= 3; i++) {
-    const bar =
-      startB +
-      Math.floor((spanB * i) / 4);
-    const x = xOf(bar);
+  const xOf = b =>
+    ((b - startB) / spanB) *
+      (plotW - 14) + 7;
+  const yOf = p =>
+    plotH -
+    ((p - minP) / (maxP - minP)) *
+      (plotH - 18) - 9;
+
+  ctx.strokeStyle =
+    "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 0.8;
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i <= 4; i++) {
+    const ratio = i / 4;
+    const p = minP +
+      (maxP - minP) * ratio;
+    const y = plotH -
+      ratio * (plotH - 18) - 9;
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, pH);
+    ctx.moveTo(0, y);
+    ctx.lineTo(plotW, y);
     ctx.stroke();
+    ctx.fillText(
+      fmtAxisP(p),
+      plotW + rightW / 2,
+      y + 3
+    );
+  }
+
+  for (let i = 0; i <= 4; i++) {
+    const b = startB +
+      Math.floor((spanB * i) / 4);
+    const x = xOf(b);
+    if (i > 0 && i < 4) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, plotH);
+      ctx.stroke();
+    }
+    if (x >= 24 && x <= plotW - 24) {
+      ctx.fillText(
+        shortDateAtBar(b),
+        x,
+        plotH + 18
+      );
+    }
   }
 
   ctx.strokeStyle =
     "rgba(255,255,255,0.22)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(0, pH);
-  ctx.lineTo(pW, pH);
-  ctx.moveTo(pW, 0);
-  ctx.lineTo(pW, pH);
+  ctx.moveTo(0, plotH);
+  ctx.lineTo(plotW, plotH);
+  ctx.moveTo(plotW, 0);
+  ctx.lineTo(plotW, plotH);
   ctx.stroke();
 
-  if (
-    lastH >= startB &&
-    lastH <= endB
-  ) {
+  if (lastH >= startB &&
+    lastH <= endB) {
     const xNow = xOf(lastH);
     ctx.fillStyle =
-      "rgba(59,130,246,0.08)";
+      "rgba(59,130,246,0.09)";
     ctx.fillRect(
       xNow,
       0,
-      Math.max(0, pW - xNow),
-      pH
+      Math.max(0, plotW - xNow),
+      plotH
     );
-    ctx.save();
-    ctx.setLineDash([4, 4]);
     ctx.strokeStyle =
       "rgba(255,255,255,0.35)";
+    ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(xNow, 0);
-    ctx.lineTo(xNow, pH);
+    ctx.lineTo(xNow, plotH);
     ctx.stroke();
-    ctx.restore();
+    ctx.setLineDash([]);
   }
 
-  const r = st.res;
-  if (r) {
+  if (st.res) {
     if (st.showGrid) {
-      for (const lv of r.pcts) {
-        if (
-          lv.price < minP ||
-          lv.price > maxP
-        ) {
+      for (const lv of st.res.pcts) {
+        if (lv.price < minP ||
+          lv.price > maxP) {
           continue;
         }
         const y = yOf(lv.price);
         const is50 =
           Math.abs(lv.ratio - 0.5) <
           0.01;
-        ctx.save();
-        ctx.setLineDash(
-          is50 ? [6, 3] : [2, 4]
-        );
         ctx.strokeStyle = is50
-          ? "rgba(250,204,21,0.55)"
+          ? "rgba(250,204,21,0.6)"
           : (lv.isMajor
-            ? "rgba(99,102,241,0.48)"
+            ? "rgba(99,102,241,0.5)"
             : "rgba(99,102,241,0.22)");
         ctx.lineWidth =
           is50 ? 1.4 : 0.8;
+        ctx.setLineDash(
+          is50 ? [6, 3] : [2, 4]
+        );
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(pW, y);
+        ctx.lineTo(plotW, y);
         ctx.stroke();
-        ctx.restore();
         if (lv.isMajor) {
-          ctx.fillStyle = is50
-            ? "#facc15" : "#818cf8";
+          ctx.fillStyle =
+            ctx.strokeStyle;
+          ctx.textAlign = "left";
           ctx.font =
-            "9px sans-serif";
+            "10px sans-serif";
           ctx.fillText(
             lv.label,
             6,
@@ -4164,73 +4005,75 @@ function drawChart() {
           );
         }
       }
+      ctx.setLineDash([]);
     }
 
     if (st.showFib) {
-      for (const f of r.fibs) {
-        if (
-          f.price < minP ||
-          f.price > maxP
-        ) {
+      for (const f of st.res.fibs) {
+        if (f.price < minP ||
+          f.price > maxP) {
           continue;
         }
         const y = yOf(f.price);
-        ctx.save();
+        ctx.strokeStyle = f.conf
+          ? "rgba(192,132,252,0.8)"
+          : "rgba(148,163,184,0.3)";
+        ctx.lineWidth =
+          f.conf ? 1.5 : 0.8;
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle =
-          "rgba(168,85,247,0.45)";
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(pW, y);
+        ctx.lineTo(plotW, y);
         ctx.stroke();
-        ctx.restore();
       }
+      ctx.setLineDash([]);
     }
 
-    for (const h of r.hits) {
-      if (
-        h.targetIndex < startB ||
-        h.targetIndex > endB
-      ) {
+    for (const h of st.res.hits) {
+      if (h.targetIndex < startB ||
+        h.targetIndex > endB) {
         continue;
       }
       const x = xOf(h.targetIndex);
-      ctx.save();
-      if (!h.isMajor) {
-        ctx.setLineDash([5, 3]);
-      }
-      ctx.strokeStyle = h.isMajor
+      const col = h.isMajor
         ? "#f472b6"
         : (h.strength >= 2
           ? "#fb923c"
-          : "rgba(250,204,21,0.45)");
+          : "rgba(250,204,21,0.5)");
+      ctx.strokeStyle = col;
       ctx.lineWidth =
         h.isMajor ? 2 : 1.2;
+      ctx.setLineDash(
+        h.isMajor ? [] : [5, 3]
+      );
       ctx.beginPath();
       ctx.moveTo(x, 14);
-      ctx.lineTo(x, pH);
+      ctx.lineTo(x, plotH);
       ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = h.isMajor
-        ? "#f472b6" : "#fb923c";
-      ctx.font = "9px sans-serif";
-      ctx.fillText(
-        h.isMajor
-          ? (intra
-            ? "◎共振" : "◎大周期")
-          : "★轉",
-        x - 10,
-        10
-      );
+      ctx.fillStyle = col;
+      ctx.textAlign = "center";
+      ctx.font = "10px sans-serif";
+      const tag = h.isMajor
+        ? (isIntraIv(st.interval)
+          ? "◎共振" : "◎大周期")
+        : (h.strength >= 2
+          ? "★轉勢" : "轉");
+      ctx.fillText(tag, x, 11);
     }
+    ctx.setLineDash([]);
 
-    if (st.showHarm && r.harm) {
-      const h = r.harm;
-      const pts = h.nodes.map(n => ({
-        x: xOf(n.index),
-        y: yOf(n.price)
-      }));
-      ctx.fillStyle = h.isBull
+    if (st.showHarm &&
+      st.res.harm) {
+      const hm = st.res.harm;
+      const pts = hm.nodes.map(
+        n => ({
+          x: xOf(n.index),
+          y: yOf(n.price),
+          l: n.l,
+          idx: n.index
+        })
+      );
+      ctx.fillStyle = hm.isBull
         ? "rgba(52,211,153,0.16)"
         : "rgba(244,114,182,0.16)";
       ctx.beginPath();
@@ -4246,13 +4089,13 @@ function drawChart() {
       ctx.closePath();
       ctx.fill();
 
-      ctx.save();
-      if (!h.isComp) {
-        ctx.setLineDash([4, 3]);
-      }
-      ctx.strokeStyle = h.isBull
+      const col = hm.isBull
         ? "#34d399" : "#f472b6";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash(
+        hm.done ? [] : [4, 3]
+      );
       ctx.beginPath();
       pts.forEach((p, idx) => {
         if (idx === 0) {
@@ -4262,87 +4105,79 @@ function drawChart() {
         }
       });
       ctx.stroke();
-      ctx.restore();
-
-      const lbls = [
-        "X", "A", "B", "C", "D"
-      ];
-      h.nodes.forEach((nd, i) => {
-        if (
-          nd.index < startB ||
-          nd.index > endB
-        ) {
-          return;
+      ctx.setLineDash([]);
+      ctx.fillStyle = col;
+      ctx.textAlign = "center";
+      ctx.font = "bold 11px sans-serif";
+      for (const p of pts) {
+        if (p.idx >= startB &&
+          p.idx <= endB) {
+          ctx.fillText(
+            p.l,
+            p.x,
+            p.y - 8
+          );
         }
-        ctx.fillStyle = h.isBull
-          ? "#34d399" : "#f472b6";
-        ctx.font =
-          "bold 10px sans-serif";
-        ctx.fillText(
-          lbls[i],
-          pts[i].x - 3,
-          pts[i].y - 6
-        );
-      });
+      }
     }
 
-    if (
-      st.showSwing &&
-      r.mSwings.length >= 2
-    ) {
-      ctx.save();
+    if (st.showSwing &&
+      st.res.mechSwings?.length >= 2) {
       ctx.strokeStyle =
         "rgba(250,204,21,0.85)";
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      r.mSwings.forEach((s, i) => {
-        const sx = xOf(s.index);
-        const sy = yOf(s.price);
-        if (i === 0) {
-          ctx.moveTo(sx, sy);
-        } else {
-          ctx.lineTo(sx, sy);
+      st.res.mechSwings.forEach(
+        (s, idx) => {
+          const sx = xOf(s.index);
+          const sy = yOf(s.price);
+          if (idx === 0) {
+            ctx.moveTo(sx, sy);
+          } else {
+            ctx.lineTo(sx, sy);
+          }
         }
-      });
+      );
       ctx.stroke();
-      for (const s of r.mSwings) {
-        if (
-          s.index < startB ||
-          s.index > endB
-        ) {
-          continue;
+      for (const s of
+        st.res.mechSwings) {
+        if (s.index >= startB &&
+          s.index <= endB) {
+          ctx.fillStyle = s.isHigh
+            ? "#fb923c" : "#34d399";
+          ctx.beginPath();
+          ctx.arc(
+            xOf(s.index),
+            yOf(s.price),
+            3,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
         }
-        ctx.fillStyle = s.isHigh
-          ? "#fb923c" : "#34d399";
-        ctx.beginPath();
-        ctx.arc(
-          xOf(s.index),
-          yOf(s.price),
-          3,
-          0,
-          Math.PI * 2
-        );
-        ctx.fill();
       }
-      ctx.restore();
     }
 
-    for (const ray of r.rays) {
-      if (ray.points.length < 2) {
+    for (const ray of st.res.rays) {
+      if (ray.pts.length < 2) {
         continue;
       }
-      ctx.strokeStyle = ray.isPrimary
+      const is1 = ray.primary;
+      const is2 =
+        ray.name === "2x1" ||
+        ray.name === "1x2";
+      const col = is1
         ? "#facc15"
-        : (ray.name === "2x1" ||
-          ray.name === "1x2"
-          ? "rgba(56,189,248,0.7)"
+        : (is2
+          ? "rgba(56,189,248,0.75)"
           : "rgba(45,212,191,0.32)");
+      ctx.strokeStyle = col;
       ctx.lineWidth =
-        ray.isPrimary ? 2 : 1;
+        is1 ? 2.1 : 1.0;
       ctx.beginPath();
-      ray.points.forEach((pt, idx) => {
-        const x = xOf(pt.barIndex);
-        const y = yOf(pt.price);
+      ray.pts.forEach((pt, idx) => {
+        const x = xOf(pt.i);
+        const y = yOf(pt.p);
         if (idx === 0) {
           ctx.moveTo(x, y);
         } else {
@@ -4351,34 +4186,31 @@ function drawChart() {
       });
       ctx.stroke();
       const lp =
-        ray.points[
-          ray.points.length - 1
-        ];
-      if (
-        lp.barIndex >= startB &&
-        lp.barIndex <= endB &&
-        lp.price >= minP &&
-        lp.price <= maxP
-      ) {
-        ctx.fillStyle =
-          ctx.strokeStyle;
-        ctx.font = "9px sans-serif";
+        ray.pts[ray.pts.length - 1];
+      if (lp.i >= startB &&
+        lp.i <= endB &&
+        lp.p >= minP &&
+        lp.p <= maxP) {
+        ctx.fillStyle = col;
+        ctx.textAlign = "right";
+        ctx.font = "10px sans-serif";
         ctx.fillText(
           ray.name,
-          pW - 24,
-          yOf(lp.price)
+          plotW - 4,
+          yOf(lp.p)
         );
       }
     }
   }
 
-  const tot = Math.max(
-    1,
-    endB - startB
+  const drawEnd = Math.min(
+    endB,
+    lastH
   );
-  const bW = Math.max(
+  const stepW = plotW / spanB;
+  const bw = Math.max(
     2,
-    Math.min(10, (pW / tot) * 0.65)
+    Math.min(10, stepW * 0.65)
   );
   if (st.style === "line") {
     ctx.strokeStyle = "#fff";
@@ -4386,11 +4218,13 @@ function drawChart() {
     ctx.beginPath();
     for (
       let i = startB;
-      i <= endH;
+      i <= drawEnd;
       i++
     ) {
       const x = xOf(i);
-      const y = yOf(cs[i].close);
+      const y = yOf(
+        st.candles[i].close
+      );
       if (i === startB) {
         ctx.moveTo(x, y);
       } else {
@@ -4401,15 +4235,15 @@ function drawChart() {
   } else {
     for (
       let i = startB;
-      i <= endH;
+      i <= drawEnd;
       i++
     ) {
-      const c = cs[i];
+      const c = st.candles[i];
       const x = xOf(i);
       const up = c.close >= c.open;
-      ctx.strokeStyle = up
+      const col = up
         ? "#22c55e" : "#ef4444";
-      ctx.fillStyle = ctx.strokeStyle;
+      ctx.strokeStyle = col;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, yOf(c.high));
@@ -4417,230 +4251,255 @@ function drawChart() {
       ctx.stroke();
       const yO = yOf(c.open);
       const yC = yOf(c.close);
+      ctx.fillStyle = col;
       ctx.fillRect(
-        x - bW / 2,
+        x - bw / 2,
         Math.min(yO, yC),
-        bW,
-        Math.max(1.5, Math.abs(yC - yO))
+        bw,
+        Math.max(
+          1.5,
+          Math.abs(yC - yO)
+        )
       );
     }
   }
 
-  if (
-    r &&
-    r.anc.index >= startB &&
-    r.anc.index <= endB
-  ) {
-    const ax = xOf(r.anc.index);
-    const ay = yOf(r.anc.price);
-    ctx.fillStyle = "#facc15";
-    ctx.beginPath();
-    ctx.arc(
-      ax,
-      ay,
-      5,
-      0,
-      Math.PI * 2
-    );
-    ctx.fill();
-    ctx.font = "10px sans-serif";
-    ctx.fillText(
-      "起點",
-      ax - 10,
-      ay + 15
-    );
+  if (st.res) {
+    const a = st.res.anchor;
+    if (a.index >= startB &&
+      a.index <= endB) {
+      const ax = xOf(a.index);
+      const ay = yOf(a.price);
+      ctx.fillStyle = "#facc15";
+      ctx.beginPath();
+      ctx.arc(
+        ax,
+        ay,
+        5,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.textAlign = "center";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(
+        "起點",
+        ax,
+        ay + 15
+      );
+    }
   }
 
-  const isFut = actB >= cs.length;
-  const lineCol = isFut
-    ? "#f97316" : "#38bdf8";
-  const cx = xOf(actB);
+  const rawAct =
+    st.selBar != null
+      ? st.selBar : lastH;
+  const actB = Math.max(
+    startB,
+    Math.min(endB, rawAct)
+  );
+  const actX = xOf(actB);
   const actP = priceAtBar(actB);
+  const isFut = actB > lastH;
+  const pinCol = isFut
+    ? "#fb923c" : "#38bdf8";
 
-  ctx.strokeStyle = lineCol;
+  ctx.strokeStyle = pinCol;
   ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.moveTo(cx, 0);
-  ctx.lineTo(cx, pH);
+  ctx.moveTo(actX, 0);
+  ctx.lineTo(actX, plotH);
   ctx.stroke();
 
-  if (actP >= minP && actP <= maxP) {
-    const cy = yOf(actP);
-    ctx.save();
+  if (actP >= minP &&
+    actP <= maxP) {
+    const actY = yOf(actP);
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle =
-      "rgba(56,189,248,0.55)";
     ctx.beginPath();
-    ctx.moveTo(0, cy);
-    ctx.lineTo(pW, cy);
+    ctx.moveTo(0, actY);
+    ctx.lineTo(plotW, actY);
     ctx.stroke();
-    ctx.restore();
+    ctx.setLineDash([]);
 
-    ctx.fillStyle = lineCol;
+    ctx.fillStyle = pinCol;
     ctx.beginPath();
     ctx.arc(
-      cx,
-      cy,
+      actX,
+      actY,
       4,
       0,
       Math.PI * 2
     );
     ctx.fill();
 
-    const pLbl = fmtAxis(actP);
-    const tagY = Math.max(
-      10,
-      Math.min(pH - 10, cy)
+    const pLbl = fmtAxisP(actP);
+    const py = Math.max(
+      11,
+      Math.min(plotH - 11, actY)
     );
-    ctx.fillStyle = lineCol;
-    ctx.fillRect(
-      pW + 2,
-      tagY - 9,
-      rW - 4,
-      18
+    drawRounded(
+      ctx,
+      plotW + 3,
+      py - 9,
+      rightW - 6,
+      18,
+      4
     );
+    ctx.fillStyle = pinCol;
+    ctx.fill();
     ctx.fillStyle = "#000";
-    ctx.font =
-      "bold 10px sans-serif";
+    ctx.font = "bold 10px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(
       pLbl,
-      pW + rW / 2,
-      tagY + 3.5
+      plotW + rightW / 2,
+      py + 3.5
     );
   }
 
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "10px sans-serif";
-  ctx.textAlign = "center";
-  for (let i = 0; i <= 4; i++) {
-    const ratio = i / 4;
-    const p =
-      minP + (maxP - minP) * ratio;
-    const y =
-      pH -
-      ratio * (pH - 16) -
-      8;
-    ctx.fillText(
-      fmtAxis(p),
-      pW + rW / 2,
-      y + 3
-    );
-  }
-
-  for (let i = 0; i <= 4; i++) {
-    const bar =
-      startB +
-      Math.floor((spanB * i) / 4);
-    const x = xOf(bar);
-    if (x < 24 || x > pW - 24) {
-      continue;
-    }
-    const fullD = fmtDate(
-      dateMsForIndex(
-        cs,
-        bar,
-        st.interval
-      ),
-      intra
-    );
-    const shortD = intra
-      ? fullD
-      : (st.interval === "1mo"
-        ? fullD.slice(0, 7)
-        : fullD.slice(5));
-    ctx.fillText(
-      shortD,
-      x,
-      pH + 18
-    );
-  }
-
-  const dFull = fmtDate(
-    dateMsForIndex(
-      cs,
-      actB,
-      st.interval
-    ),
-    intra
-  );
-  const pillW = intra ? 132 : 116;
+  const dFull = fullDateAtBar(actB);
+  const pillW = isIntraIv(
+    st.interval
+  ) ? 132 : 122;
   const pillH = 22;
-  const btnW = 22;
-  const pillX = Math.max(
+  const px = Math.max(
     pillW / 2 + 2,
     Math.min(
-      pW - pillW / 2 - 2,
-      cx
+      plotW - pillW / 2 - 2,
+      actX
     )
   );
-  const boxL = pillX - pillW / 2;
-  const boxT = pH + 4;
+  const py = plotH + 4;
   st.pillBox = {
-    x: boxL,
-    y: boxT,
+    x: px - pillW / 2,
+    y: py,
     w: pillW,
-    h: pillH,
-    btnW
+    h: pillH
   };
 
-  ctx.fillStyle = lineCol;
-  ctx.fillRect(
-    boxL,
-    boxT,
+  drawRounded(
+    ctx,
+    st.pillBox.x,
+    st.pillBox.y,
     pillW,
-    pillH
+    pillH,
+    5
   );
+  ctx.fillStyle = pinCol;
+  ctx.fill();
   ctx.fillStyle = "#000";
-  ctx.font =
-    "bold 10px sans-serif";
+  ctx.font = "bold 10px sans-serif";
   ctx.textAlign = "center";
   ctx.fillText(
-    "<",
-    boxL + btnW / 2,
-    boxT + 14.5
+    "◀ " + dFull + " ▶",
+    px,
+    py + 14.5
   );
-  ctx.fillText(
-    dFull,
-    pillX,
-    boxT + 14.5
-  );
-  ctx.fillText(
-    ">",
-    boxL + pillW - btnW / 2,
-    boxT + 14.5
-  );
-  ctx.textAlign = "left";
 
-  let pTxt = "";
-  if (actB < cs.length) {
-    pTxt =
-      "收 " +
-      fmt(cs[actB].close);
-  } else {
-    pTxt =
-      "未來+" +
-      (actB - lastH) +
-      unitName(st.interval);
-  }
-  const gTxt = r
-    ? " | 1x1:" + fmt(actP)
-    : "";
+  updateHud(actB, dFull);
+}
+
+function updateHud(idx, dFull) {
+  const lastI =
+    st.candles.length - 1;
   const head = st.name
-    ? st.name + " "
-    : st.code + " ";
+    ? st.code + " " + st.name + " | "
+    : st.code + " | ";
+  const pTxt = idx <= lastI
+    ? "收 " +
+      fmt(st.candles[idx].close)
+    : "未來+" + (idx - lastI) +
+      unitNameOf(
+        st.interval,
+        st.res?.effTm || "trading"
+      );
+  let gTxt = "";
+  if (st.res) {
+    const dt = barTimeDelta(
+      st.candles,
+      st.res.anchor.index,
+      idx,
+      st.interval,
+      st.res.effTm
+    );
+    const s = st.res.isUp ? 1 : -1;
+    const p1 = Math.max(
+      0,
+      st.res.anchor.price +
+        s * st.res.vol * dt
+    );
+    gTxt = " | 1x1:" + fmt(p1);
+  }
   document.getElementById(
     "hudTxt"
   ).textContent =
     head + dFull + " " + pTxt + gTxt;
 }
 
-function playWebAlarm() {
+function unlockWebAudio() {
   try {
     const Ctx =
       window.AudioContext ||
       window.webkitAudioContext;
-    const ctx = new Ctx();
+    if (!Ctx) return null;
+    if (!st.audioCtx) {
+      st.audioCtx = new Ctx();
+    }
+    if (st.audioCtx.state ===
+      "suspended") {
+      st.audioCtx.resume();
+    }
+    return st.audioCtx;
+  } catch (e) {
+    return null;
+  }
+}
+
+function reqSystemNotifyPerm() {
+  try {
+    if ("Notification" in window &&
+      Notification.permission ===
+      "default") {
+      Notification.requestPermission();
+    }
+  } catch (e) {}
+}
+
+function pushSystemNotify(hit) {
+  try {
+    if (!("Notification" in window) ||
+      Notification.permission !==
+      "granted") {
+      return;
+    }
+    const pStr = fmt(
+      hit.triggeredPrice ??
+      hit.targetPrice
+    );
+    const title =
+      "🔔 " + hit.symbol +
+      " 到價 " + pStr;
+    const body =
+      "已" + hit.condition + " " +
+      fmt(hit.targetPrice) +
+      "\n方案：" + hit.planNote;
+    const n = new Notification(
+      title,
+      {
+        body,
+        requireInteraction: true
+      }
+    );
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch (e) {}
+}
+
+function playWebAlarm() {
+  try {
+    const ctx = unlockWebAudio();
+    if (!ctx) return;
     const now = ctx.currentTime;
     const tone = st.ringTone || "alarm";
     let freqs = [880, 1175, 880, 1175];
@@ -4670,7 +4529,7 @@ function playWebAlarm() {
         now + i * step
       );
       gain.gain.setValueAtTime(
-        tone === "electronic" ? 0.16 : 0.26,
+        tone === "electronic" ? 0.18 : 0.28,
         now + i * step
       );
       gain.gain.exponentialRampToValueAtTime(
@@ -4690,33 +4549,55 @@ function startWebRingLoop() {
   playWebAlarm();
   st.ringTimer = setInterval(
     playWebAlarm,
-    2200
+    1800
   );
+}
+
+function initBgWorker() {
+  try {
+    const code =
+      "setInterval(()=>" +
+      "postMessage('tick'),30000);";
+    const blob = new Blob(
+      [code],
+      {
+        type:
+          "application/javascript"
+      }
+    );
+    const url =
+      URL.createObjectURL(blob);
+    st.bgWorker = new Worker(url);
+    st.bgWorker.onmessage = () => {
+      pollWebAlerts();
+    };
+  } catch (e) {
+    setInterval(
+      pollWebAlerts,
+      30000
+    );
+  }
 }
 
 function loadAlertsLocal() {
-  st.barkKey =
-    localStorage.getItem(BARK_KEY) || "";
-  st.ringTone =
-    localStorage.getItem(TONE_KEY) ||
-    "alarm";
-  const tSel = document.getElementById(
-    "ringToneSel"
-  );
-  if (tSel) tSel.value = st.ringTone;
-  const raw =
-    localStorage.getItem(ALERT_KEY);
-  if (raw) {
-    try {
+  try {
+    st.barkKey =
+      localStorage.getItem(BARK_KEY) ||
+      "";
+    st.ringTone =
+      localStorage.getItem(TONE_KEY) ||
+      "alarm";
+    const raw =
+      localStorage.getItem(ALERT_KEY);
+    if (raw) {
       st.alerts = JSON.parse(raw);
-    } catch (e) {
-      st.alerts = [];
     }
-  }
-  updateAlertBtnBadge();
+  } catch (e) {}
+  updateAlertBadge();
+  syncAlertsCloud();
 }
 
-async function syncAlertsCloud() {
+function saveAlertsLocal() {
   try {
     localStorage.setItem(
       BARK_KEY,
@@ -4731,7 +4612,22 @@ async function syncAlertsCloud() {
       JSON.stringify(st.alerts)
     );
   } catch (e) {}
-  updateAlertBtnBadge();
+  updateAlertBadge();
+  syncAlertsCloud();
+}
+
+function updateAlertBadge() {
+  const cnt = st.alerts.filter(
+    a => a.isEnabled && !a.isTriggered
+  ).length;
+  document.getElementById(
+    "btnAlerts"
+  ).textContent = cnt > 0
+    ? "🔔 到價(" + cnt + ")"
+    : "🔔 到價";
+}
+
+async function syncAlertsCloud() {
   try {
     await fetch(
       "/.netlify/functions/yahoo" +
@@ -4752,37 +4648,24 @@ async function syncAlertsCloud() {
   } catch (e) {}
 }
 
-function updateAlertBtnBadge() {
-  const cnt = st.alerts.filter(
-    a => a.isEnabled && !a.isTriggered
-  ).length;
-  const b = document.getElementById(
-    "btnAlerts"
-  );
-  if (b) {
-    b.textContent = cnt > 0
-      ? "🔔 到價(" + cnt + ")"
-      : "🔔 到價";
-  }
-}
-
 function openAlertModal() {
-  const cs = st.candles;
-  const curP = cs.length > 0
-    ? cs[cs.length - 1].close : 0;
-  const titleF = st.name
-    ? st.code + " " + st.name
-    : st.code;
+  document.getElementById(
+    "barkKeyInp"
+  ).value = st.barkKey;
+  document.getElementById(
+    "ringToneSel"
+  ).value = st.ringTone;
+  const last =
+    st.candles[st.candles.length - 1];
+  const curP = last ? last.close : 0;
   document.getElementById(
     "alCurSym"
-  ).textContent = "標的：" + titleF;
+  ).textContent =
+    st.code + " " + (st.name || "");
   document.getElementById(
     "alCurP"
   ).textContent =
     "現價：" + fmt(curP);
-  document.getElementById(
-    "barkKeyInp"
-  ).value = st.barkKey;
   const tInp = document.getElementById(
     "alTargetInp"
   );
@@ -4794,57 +4677,68 @@ function openAlertModal() {
   );
   mSel.value = st.market === "us"
     ? "scheduled" : "immediate";
-  updateAlModeUi();
+  syncAlertModeUI();
 
   const qBox = document.getElementById(
     "alQuickFill"
   );
   qBox.innerHTML = "";
-  const addFillBtn = (lbl, val) => {
-    if (!val || val <= 0) return;
-    const btn =
-      document.createElement("button");
-    btn.className = "btn btn-c";
-    btn.style.fontSize = "11px";
-    btn.textContent =
-      lbl + "(" + fmt(val) + ")";
-    btn.onclick = () => {
-      tInp.value = fmt(val);
-      document.getElementById(
-        "alCondSel"
-      ).value = val >= curP
-        ? "向上突破" : "向下跌破";
-    };
-    qBox.appendChild(btn);
-  };
-
-  if (st.res && cs.length > 0) {
-    const r = st.res;
-    const last = cs[cs.length - 1];
+  if (st.res && last) {
     const dt = barTimeDelta(
-      cs,
-      r.anc.index,
+      st.candles,
+      st.res.anchor.index,
       last.id,
       st.interval,
-      r.effMode
+      st.res.effTm
     );
-    const s = r.isUp ? 1 : -1;
+    const s = st.res.isUp ? 1 : -1;
     const p1 = Math.max(
       0,
-      r.anc.price + s * r.vol * dt
+      st.res.anchor.price +
+        s * st.res.vol * dt
     );
-    addFillBtn("1x1主線", p1);
-    if (r.harm) {
+    const btns = [
+      {
+        lbl: "1x1主線(" +
+          fmt(p1) + ")",
+        val: p1,
+        cls: "btn btn-y"
+      }
+    ];
+    if (st.res.harm) {
       const hd =
-        (r.harm.przLo + r.harm.przHi) /
-        2;
-      addFillBtn("和諧D點", hd);
+        (st.res.harm.przLo +
+          st.res.harm.przHi) / 2;
+      btns.push({
+        lbl: "和諧D點(" +
+          fmt(hd) + ")",
+        val: hd,
+        cls: "btn btn-m"
+      });
     }
-    if (r.stopInfo) {
-      addFillBtn(
-        "擺動止損",
-        r.stopInfo[0]
-      );
+    if (st.res.stopInfo) {
+      const sp =
+        st.res.stopInfo.price;
+      btns.push({
+        lbl: "擺動止損(" +
+          fmt(sp) + ")",
+        val: sp,
+        cls: "btn btn-del"
+      });
+    }
+    for (const b of btns) {
+      const el = document
+        .createElement("button");
+      el.className = b.cls;
+      el.textContent = b.lbl;
+      el.onclick = () => {
+        tInp.value = fmt(b.val);
+        document.getElementById(
+          "alCondSel"
+        ).value = b.val >= curP
+          ? "向上突破" : "向下跌破";
+      };
+      qBox.appendChild(el);
     }
   }
   renderAlertList();
@@ -4854,141 +4748,112 @@ function openAlertModal() {
 }
 
 function renderAlertList() {
-  const box = document.getElementById(
-    "alListBox"
-  );
   document.getElementById(
     "alListCnt"
   ).textContent =
     "監控清單 (" +
     st.alerts.length + ")";
+  const box = document.getElementById(
+    "alListBox"
+  );
   box.innerHTML = "";
-  if (st.alerts.length === 0) {
+  if (!st.alerts.length) {
     box.innerHTML =
-      '<div class="lbl">暫無到價警報</div>';
+      '<div class="lbl">' +
+      '暫無到價警報，請在上方設定</div>';
     return;
   }
-  for (const it of st.alerts) {
-    const row =
-      document.createElement("div");
+  for (const item of st.alerts) {
+    const row = document
+      .createElement("div");
     row.className = "al-row";
-    const tStr =
-      String(it.schedHour ?? 8)
-        .padStart(2, "0") +
-      ":" +
-      String(it.schedMinute ?? 30)
-        .padStart(2, "0");
+    const hh = String(
+      item.schedHour ?? 8
+    ).padStart(2, "0");
+    const mm = String(
+      item.schedMinute ?? 30
+    ).padStart(2, "0");
+    const tStr = hh + ":" + mm;
     const mTag =
-      it.notifyMode === "scheduled"
+      item.notifyMode === "scheduled"
         ? "定時" + tStr : "即時";
-    const stTxt = it.isTriggered
+    const stTag = item.isTriggered
       ? "已觸發"
-      : (it.isPendingDelivery
+      : (item.isPendingDelivery
         ? "待" + tStr + "派發"
-        : (it.isEnabled
+        : (item.isEnabled
           ? "監控中" : "已停用"));
-    const stCol = it.isTriggered
+    const stCol = item.isTriggered
       ? "#fb923c"
-      : (it.isPendingDelivery
+      : (item.isPendingDelivery
         ? "#facc15"
-        : (it.isEnabled
+        : (item.isEnabled
           ? "#34d399" : "#94a3b8"));
+    row.innerHTML =
+      '<div style="display:flex;' +
+      'justify-content:space-between;' +
+      'align-items:center;gap:4px;' +
+      'flex-wrap:wrap">' +
+      '<span style="color:#facc15;' +
+      'font-weight:700;font-size:12px">' +
+      item.symbol + ' ' +
+      item.condition + ' ' +
+      fmt(item.targetPrice) +
+      '</span>' +
+      '<span style="font-size:10px;' +
+      'padding:1px 5px;border-radius:4px;' +
+      'background:#3b0764;color:#d8b4fe">' +
+      mTag + '</span>' +
+      '<span style="font-size:11px;' +
+      'color:' + stCol + '">' +
+      stTag + '</span>' +
+      '</div>' +
+      '<div style="font-size:12px;' +
+      'color:#e2e8f0;line-height:1.45;' +
+      'white-space:pre-wrap">方案：' +
+      item.planNote + '</div>';
 
-    const top =
-      document.createElement("div");
-    top.style.display = "flex";
-    top.style.alignItems = "center";
-    top.style.gap = "6px";
-
-    const symSp =
-      document.createElement("span");
-    symSp.style.color = "#facc15";
-    symSp.style.fontWeight = "700";
-    symSp.style.fontSize = "12px";
-    symSp.textContent =
-      it.symbol + " " + it.name;
-
-    const condSp =
-      document.createElement("span");
-    condSp.style.color = "#38bdf8";
-    condSp.style.fontSize = "12px";
-    condSp.textContent =
-      it.condition + " " +
-      fmt(it.targetPrice);
-
-    const modeSp =
-      document.createElement("span");
-    modeSp.style.fontSize = "10px";
-    modeSp.style.padding = "1px 5px";
-    modeSp.style.borderRadius = "4px";
-    modeSp.style.background =
-      "rgba(168,85,247,0.25)";
-    modeSp.style.color = "#c084fc";
-    modeSp.textContent = mTag;
-
-    const sp =
-      document.createElement("div");
-    sp.className = "sp";
-
-    const tag =
-      document.createElement("span");
-    tag.style.color = stCol;
-    tag.style.fontSize = "11px";
-    tag.textContent = stTxt;
-
-    const delB =
-      document.createElement("button");
-    delB.className = "btn btn-del";
-    delB.textContent = "刪";
-    delB.onclick = () => {
-      st.alerts = st.alerts.filter(
-        x => x.id !== it.id
-      );
-      syncAlertsCloud();
+    const actRow = document
+      .createElement("div");
+    actRow.style.cssText =
+      "display:flex;gap:6px;margin-top:2px";
+    const b1 = document
+      .createElement("button");
+    b1.className = "btn";
+    b1.textContent = item.isTriggered
+      ? "重新啟用"
+      : (item.isEnabled
+        ? "暫停" : "啟用");
+    b1.onclick = () => {
+      if (item.isTriggered) {
+        item.isTriggered = false;
+        item.isPendingDelivery =
+          false;
+        item.isEnabled = true;
+      } else {
+        item.isEnabled =
+          !item.isEnabled;
+        item.isPendingDelivery =
+          false;
+      }
+      saveAlertsLocal();
       renderAlertList();
     };
-
-    top.appendChild(symSp);
-    top.appendChild(condSp);
-    top.appendChild(modeSp);
-    top.appendChild(sp);
-    top.appendChild(tag);
-    top.appendChild(delB);
-
-    const note =
-      document.createElement("div");
-    note.style.fontSize = "12px";
-    note.style.color = "#e2e8f0";
-    note.style.whiteSpace = "pre-wrap";
-    note.textContent =
-      "方案：" + it.planNote;
-
-    row.appendChild(top);
-    row.appendChild(note);
+    const b2 = document
+      .createElement("button");
+    b2.className = "btn btn-del";
+    b2.textContent = "刪除";
+    b2.onclick = () => {
+      st.alerts = st.alerts.filter(
+        x => x.id !== item.id
+      );
+      saveAlertsLocal();
+      renderAlertList();
+    };
+    actRow.appendChild(b1);
+    actRow.appendChild(b2);
+    row.appendChild(actRow);
     box.appendChild(row);
-  }
-}
-
-function updateAlModeUi() {
-  const mode = document.getElementById(
-    "alModeSel"
-  ).value;
-  const tInp = document.getElementById(
-    "alTimeInp"
-  );
-  const tip = document.getElementById(
-    "alModeTip"
-  );
-  if (mode === "scheduled") {
-    tInp.style.display =
-      "inline-block";
-    tip.textContent =
-      "深夜觸價先暫存，到點派發";
-    tip.style.color = "#38bdf8";
-  } else {
-    tInp.style.display = "none";
-    tip.textContent = "到價立刻響鬧";
-    tip.style.color = "#fb923c";
   }
 }
 
@@ -4996,7 +4861,7 @@ async function pollWebAlerts() {
   const active = st.alerts.filter(
     a => a.isEnabled && !a.isTriggered
   );
-  if (active.length === 0) return;
+  if (!active.length) return;
   try {
     await syncAlertsCloud();
     const r = await fetch(
@@ -5005,25 +4870,37 @@ async function pollWebAlerts() {
     );
     if (!r.ok) return;
     const j = await r.json();
+    if (Array.isArray(j.alerts)) {
+      st.alerts = j.alerts;
+      localStorage.setItem(
+        ALERT_KEY,
+        JSON.stringify(st.alerts)
+      );
+      updateAlertBadge();
+      if (document.getElementById(
+        "alertModal"
+      ).style.display === "flex") {
+        renderAlertList();
+      }
+    }
     if (Array.isArray(j.triggered) &&
       j.triggered.length > 0) {
       const hit = j.triggered[0];
-      if (Array.isArray(j.alerts)) {
-        st.alerts = j.alerts;
-        syncAlertsCloud();
-      }
       document.getElementById(
         "trigSym"
       ).textContent =
-        hit.symbol + " " + hit.name;
+        hit.symbol + " " +
+        (hit.name || "");
       document.getElementById(
         "trigDetail"
       ).textContent =
         "已" + hit.condition + " " +
         fmt(hit.targetPrice) +
         "（觸發價：" +
-        fmt(hit.triggeredPrice) +
-        "）";
+        fmt(
+          hit.triggeredPrice ??
+          hit.targetPrice
+        ) + "）";
       document.getElementById(
         "trigPlan"
       ).textContent = hit.planNote;
@@ -5031,18 +4908,110 @@ async function pollWebAlerts() {
         "trigModal"
       ).style.display = "flex";
       startWebRingLoop();
+      pushSystemNotify(hit);
     }
   } catch (e) {}
+}
+
+function setSegVal(id, val) {
+  const box = document.getElementById(
+    id
+  );
+  for (const b of
+    box.querySelectorAll("button")) {
+    b.classList.toggle(
+      "on",
+      b.dataset.v === val
+    );
+  }
+}
+
+function bindSeg(id, cb) {
+  const box = document.getElementById(
+    id
+  );
+  box.addEventListener("click", e => {
+    const b =
+      e.target.closest("button");
+    if (!b) return;
+    setSegVal(id, b.dataset.v);
+    cb(b.dataset.v);
+  });
+}
+
+function syncModeBtn() {
+  const b = document.getElementById(
+    "btnMode"
+  );
+  b.textContent = st.moveLine
+    ? "移動時間線" : "拖動歷史";
+  b.className = st.moveLine
+    ? "btn btn-hi" : "btn btn-m";
+}
+
+function ensureBarVisible(bar) {
+  const maxP = maxPanLimit();
+  const vr = getVisRange();
+  if (bar < vr.startB) {
+    st.panOff = Math.min(
+      maxP,
+      st.panOff + (vr.startB - bar)
+    );
+  } else if (bar > vr.endB) {
+    st.panOff = Math.max(
+      0,
+      st.panOff - (bar - vr.endB)
+    );
+  }
+}
+
+function stepBar(delta) {
+  if (!st.candles.length) return;
+  const lastH =
+    st.candles.length - 1;
+  const maxE = lastH + st.horizon;
+  const cur =
+    st.selBar != null
+      ? st.selBar : lastH;
+  const next = Math.max(
+    0,
+    Math.min(maxE, cur + delta)
+  );
+  st.selBar = next;
+  ensureBarVisible(next);
+  document.getElementById(
+    "btnSetAnc"
+  ).style.display = next <= lastH
+    ? "inline-block" : "none";
+  drawChart();
+}
+
+function syncAlertModeUI() {
+  const val = document.getElementById(
+    "alModeSel"
+  ).value;
+  const isSched =
+    val === "scheduled";
+  document.getElementById(
+    "alTimeInp"
+  ).style.display =
+    isSched ? "inline-block" : "none";
+  document.getElementById(
+    "alModeTip"
+  ).textContent = isSched
+    ? "半夜先暫存，到點再響鬧"
+    : "到價立刻響鬧";
 }
 
 function initEvents() {
   bindSeg("mktSeg", v => {
     st.market = v;
-    savePrefs();
+    st.code = v === "hk"
+      ? "^HSI" : "^IXIC";
     document.getElementById(
       "codeInp"
-    ).value =
-      v === "hk" ? "^HSI" : "^IXIC";
+    ).value = st.code;
+    savePrefs();
     loadSymbol();
   });
 
@@ -5054,13 +5023,17 @@ function initEvents() {
 
   bindSeg("intSeg", v => {
     st.interval = v;
-    syncTimeModeVis();
+    document.getElementById(
+      "tModeSeg"
+    ).style.display = isIntraIv(v)
+      ? "none" : "inline-flex";
     savePrefs();
     loadSymbol();
   });
 
   bindSeg("horSeg", v => {
     st.horizon = Number(v);
+    st.panOff = 0;
     savePrefs();
     runAnalysis();
   });
@@ -5081,11 +5054,8 @@ function initEvents() {
     "btnHsi"
   ).onclick = () => {
     st.market = "hk";
-    setSegVal("mktSeg", "hk");
-    savePrefs();
-    document.getElementById(
-      "codeInp"
-    ).value = "^HSI";
+    st.code = "^HSI";
+    syncControlsUI();
     loadSymbol();
   };
 
@@ -5093,55 +5063,30 @@ function initEvents() {
     "btnIxic"
   ).onclick = () => {
     st.market = "us";
-    setSegVal("mktSeg", "us");
-    savePrefs();
-    document.getElementById(
-      "codeInp"
-    ).value = "^IXIC";
-    loadSymbol();
-  };
-
-  document.getElementById(
-    "presetSel"
-  ).onchange = e => {
-    const val = e.target.value;
-    if (!val) return;
-    const hit = st.saved.find(
-      x => x.s === val
-    );
-    if (hit && hit.m) {
-      st.market = hit.m;
-      setSegVal("mktSeg", hit.m);
-    }
-    document.getElementById(
-      "codeInp"
-    ).value = val;
+    st.code = "^IXIC";
+    syncControlsUI();
     loadSymbol();
   };
 
   document.getElementById(
     "btnDelSaved"
   ).onclick = () => {
-    const sel = document.getElementById(
-      "presetSel"
-    );
-    const target =
-      sel.value || st.code;
-    if (!target) return;
     st.saved = st.saved.filter(
-      x => x.s !== target
+      x => x.s !== st.code
     );
     persistSaved();
     fillPresets();
+    showMsg(
+      "已從自選移除 " + st.code,
+      true
+    );
   };
-
-  document.getElementById(
-    "btnGo"
-  ).onclick = loadSymbol;
 
   document.getElementById(
     "btnAlerts"
   ).onclick = () => {
+    unlockWebAudio();
+    reqSystemNotifyPerm();
     playWebAlarm();
     openAlertModal();
   };
@@ -5155,15 +5100,19 @@ function initEvents() {
   };
 
   document.getElementById(
-    "btnTestRing"
-  ).onclick = playWebAlarm;
-
-  document.getElementById(
     "ringToneSel"
   ).onchange = e => {
     st.ringTone = e.target.value;
+    saveAlertsLocal();
     playWebAlarm();
-    syncAlertsCloud();
+  };
+
+  document.getElementById(
+    "btnTestRing"
+  ).onclick = () => {
+    unlockWebAudio();
+    reqSystemNotifyPerm();
+    playWebAlarm();
   };
 
   document.getElementById(
@@ -5172,12 +5121,33 @@ function initEvents() {
     st.barkKey = document
       .getElementById("barkKeyInp")
       .value.trim();
-    syncAlertsCloud();
+    saveAlertsLocal();
+    showMsg(
+      "已儲存並同步 iPhone 推播 Key",
+      true
+    );
   };
 
   document.getElementById(
     "alModeSel"
-  ).onchange = updateAlModeUi;
+  ).onchange = syncAlertModeUI;
+
+  document.getElementById(
+    "alTargetInp"
+  ).oninput = e => {
+    const val = parseFloat(
+      e.target.value
+    );
+    const last = st.candles[
+      st.candles.length - 1
+    ];
+    if (val > 0 && last) {
+      document.getElementById(
+        "alCondSel"
+      ).value = val >= last.close
+        ? "向上突破" : "向下跌破";
+    }
+  };
 
   document.getElementById(
     "btnAddAlert"
@@ -5187,27 +5157,21 @@ function initEvents() {
         "alTargetInp"
       ).value
     );
-    if (isNaN(val) || val <= 0) {
-      return;
-    }
+    if (!val || val <= 0) return;
     const cond = document
       .getElementById("alCondSel")
       .value;
     const mode = document
       .getElementById("alModeSel")
       .value;
-    const tParts = (
-      document.getElementById(
-        "alTimeInp"
-      ).value || "08:30"
-    ).split(":");
+    const tParts = (document
+      .getElementById("alTimeInp")
+      .value || "08:30").split(":");
     const sh = parseInt(
-      tParts[0],
-      10
+      tParts[0], 10
     ) || 8;
     const sm = parseInt(
-      tParts[1],
-      10
+      tParts[1], 10
     ) || 30;
     const note = document
       .getElementById("alNoteInp")
@@ -5216,7 +5180,6 @@ function initEvents() {
       id: String(Date.now()),
       symbol: st.code,
       name: st.name || st.code,
-      market: st.market,
       targetPrice: val,
       condition: cond,
       notifyMode: mode,
@@ -5228,11 +5191,13 @@ function initEvents() {
       isTriggered: false,
       isPendingDelivery: false
     });
+    saveAlertsLocal();
     document.getElementById(
       "alNoteInp"
     ).value = "";
+    unlockWebAudio();
+    reqSystemNotifyPerm();
     playWebAlarm();
-    syncAlertsCloud();
     renderAlertList();
   };
 
@@ -5240,93 +5205,152 @@ function initEvents() {
     "btnAckTrig"
   ).onclick = () => {
     clearInterval(st.ringTimer);
+    st.ringTimer = null;
     document.getElementById(
       "trigModal"
     ).style.display = "none";
   };
+
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.visibilityState ===
+        "visible") {
+        pollWebAlerts();
+      }
+    }
+  );
+
+  window.addEventListener(
+    "pointerdown",
+    unlockWebAudio,
+    { passive: true }
+  );
 
   const inp = document.getElementById(
     "codeInp"
   );
   inp.oninput = () => {
     clearTimeout(st.acTimer);
-    const val = inp.value.trim();
-    if (!val) {
-      renderAc([]);
+    const q = inp.value.trim();
+    if (!q) {
+      document.getElementById(
+        "acBox"
+      ).style.display = "none";
       return;
     }
     st.acTimer = setTimeout(
       async () => {
         const list =
-          await searchStocks(val);
-        renderAc(list);
+          await searchCandidates(q);
+        renderAcBox(list);
       },
-      220
+      250
     );
   };
-
+  inp.onblur = () => {
+    setTimeout(() => {
+      document.getElementById(
+        "acBox"
+      ).style.display = "none";
+    }, 180);
+  };
   inp.onkeydown = e => {
     if (e.key === "Enter") {
-      renderAc([]);
+      document.getElementById(
+        "acBox"
+      ).style.display = "none";
       loadSymbol();
     }
   };
 
-  document.addEventListener(
-    "click",
-    e => {
-      if (!e.target.closest(
-        ".ac-wrap"
-      )) {
-        renderAc([]);
-      }
-    }
-  );
+  document.getElementById(
+    "btnGo"
+  ).onclick = loadSymbol;
 
-  const tog = (id, key, fn) => {
-    const el =
-      document.getElementById(id);
-    el.onclick = () => {
-      st[key] = !st[key];
-      el.classList.toggle(
-        "on",
-        st[key]
-      );
-      savePrefs();
-      fn();
-    };
+  document.getElementById(
+    "presetSel"
+  ).onchange = e => {
+    if (!e.target.value) return;
+    const [sym, mkt] =
+      e.target.value.split("|");
+    st.market = mkt;
+    st.code = sym;
+    syncControlsUI();
+    loadSymbol();
   };
-  tog("togSwing", "showSwing", drawChart);
-  tog("togGrid", "showGrid", drawChart);
-  tog("togFib", "showFib", drawChart);
-  tog("togHarm", "showHarm", drawChart);
 
-  const updVol = () => {
-    document.getElementById(
-      "volLbl"
-    ).textContent =
-      "波動:" +
-      st.volMult.toFixed(1) + "x";
+  document.getElementById(
+    "togSwing"
+  ).onclick = e => {
+    st.showSwing = !st.showSwing;
+    e.target.classList.toggle(
+      "on",
+      st.showSwing
+    );
     savePrefs();
-    runAnalysis();
+    drawChart();
   };
+
+  document.getElementById(
+    "togGrid"
+  ).onclick = e => {
+    st.showGrid = !st.showGrid;
+    e.target.classList.toggle(
+      "on",
+      st.showGrid
+    );
+    savePrefs();
+    drawChart();
+  };
+
+  document.getElementById(
+    "togFib"
+  ).onclick = e => {
+    st.showFib = !st.showFib;
+    e.target.classList.toggle(
+      "on",
+      st.showFib
+    );
+    savePrefs();
+    drawChart();
+  };
+
+  document.getElementById(
+    "togHarm"
+  ).onclick = e => {
+    st.showHarm = !st.showHarm;
+    e.target.classList.toggle(
+      "on",
+      st.showHarm
+    );
+    savePrefs();
+    updateCards();
+    drawChart();
+  };
+
   document.getElementById(
     "volDn"
   ).onclick = () => {
     st.volMult = Math.max(
       0.4,
-      st.volMult - 0.1
+      +(st.volMult - 0.1).toFixed(1)
     );
-    updVol();
+    syncControlsUI();
+    savePrefs();
+    runAnalysis();
   };
+
   document.getElementById(
     "volUp"
   ).onclick = () => {
     st.volMult = Math.min(
       2.5,
-      st.volMult + 0.1
+      +(st.volMult + 0.1).toFixed(1)
     );
-    updVol();
+    syncControlsUI();
+    savePrefs();
+    runAnalysis();
   };
 
   document.getElementById(
@@ -5340,7 +5364,10 @@ function initEvents() {
       15,
       Math.floor(st.histBars / 3)
     );
-    panBackward(step);
+    st.panOff = Math.min(
+      maxPanLimit(),
+      st.panOff + step
+    );
     drawChart();
   };
 
@@ -5351,25 +5378,11 @@ function initEvents() {
       15,
       Math.floor(st.histBars / 3)
     );
-    panForward(step);
+    st.panOff = Math.max(
+      0,
+      st.panOff - step
+    );
     drawChart();
-  };
-
-  const bMode =
-    document.getElementById("btnMode");
-  bMode.onclick = () => {
-    st.moveLine = !st.moveLine;
-    bMode.textContent = st.moveLine
-      ? "移動時間線" : "拖動歷史";
-    bMode.classList.toggle(
-      "btn-hi",
-      st.moveLine
-    );
-    bMode.classList.toggle(
-      "on",
-      !st.moveLine
-    );
-    savePrefs();
   };
 
   document.getElementById(
@@ -5377,6 +5390,14 @@ function initEvents() {
   ).onclick = () => {
     st.panOff = 0;
     drawChart();
+  };
+
+  document.getElementById(
+    "btnMode"
+  ).onclick = () => {
+    st.moveLine = !st.moveLine;
+    syncModeBtn();
+    savePrefs();
   };
 
   document.getElementById(
@@ -5389,6 +5410,7 @@ function initEvents() {
     savePrefs();
     drawChart();
   };
+
   document.getElementById(
     "btnZoomOut"
   ).onclick = () => {
@@ -5403,26 +5425,31 @@ function initEvents() {
   document.getElementById(
     "btnSetAnc"
   ).onclick = () => {
-    if (st.selBar != null) {
+    if (st.selBar != null &&
+      st.selBar < st.candles.length) {
       st.customAnc = st.selBar;
       runAnalysis();
     }
   };
+
   document.getElementById(
     "btnAutoAnc"
   ).onclick = () => {
     st.customAnc = null;
     st.selBar = null;
+    document.getElementById(
+      "btnSetAnc"
+    ).style.display = "none";
     runAnalysis();
   };
 
   document.getElementById(
     "btnCopy"
   ).onclick = () => {
-    if (!st.res) return;
-    navigator.clipboard.writeText(
-      st.res.report
-    );
+    const txt = document.getElementById(
+      "repBody"
+    ).textContent;
+    navigator.clipboard?.writeText(txt);
     const b = document.getElementById(
       "btnCopy"
     );
@@ -5432,174 +5459,181 @@ function initEvents() {
     }, 1500);
   };
 
-  const cv =
-    document.getElementById("cv");
-  let dragging = false;
+  const cv = document.getElementById(
+    "cv"
+  );
+  let dragMode = null;
+  let dragStartX = 0;
+  let dragBasePan = 0;
   let moved = false;
-  let dragAxis = false;
-  let downX = 0;
-  let basePan = 0;
 
-  const barAt = clientX => {
-    const rect =
-      cv.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const {
-      startB,
-      endB
-    } = getVisRange();
+  const barFromX = (x, W) => {
+    const rightW = 58;
+    const plotW = Math.max(
+      1,
+      W - rightW
+    );
+    const vr = getVisRange();
     const span = Math.max(
       1,
-      endB - startB
+      vr.endB - vr.startB
     );
-    const useW = Math.max(
-      1,
-      rect.width - 58 - 12
-    );
-    const r = (x - 6) / useW;
-    const off = Math.round(r * span);
+    const r = (x - 7) / (plotW - 14);
+    const b = vr.startB +
+      Math.round(r * span);
     return Math.max(
-      startB,
-      Math.min(endB, startB + off)
+      vr.startB,
+      Math.min(vr.endB, b)
     );
   };
 
-  const checkPillBtn = (x, y) => {
-    const b = st.pillBox;
-    if (!b) return 0;
-    if (y < b.y - 6 ||
-      y > b.y + b.h + 6) {
-      return 0;
-    }
-    if (x >= b.x - 4 &&
-      x <= b.x + b.btnW + 2) {
-      return -1;
-    }
-    if (x >= b.x + b.w - b.btnW - 2 &&
-      x <= b.x + b.w + 4) {
-      return 1;
-    }
-    return 0;
-  };
+  cv.addEventListener(
+    "pointerdown",
+    e => {
+      if (!st.candles.length) return;
+      const rect =
+        cv.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      moved = false;
+      dragStartX = x;
 
-  cv.onpointerdown = e => {
-    const rect =
-      cv.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const stepDir = checkPillBtn(x, y);
-    if (stepDir !== 0) {
-      stepBar(stepDir);
-      return;
-    }
-    dragging = true;
-    moved = false;
-    dragAxis = y >= rect.height - 40;
-    downX = e.clientX;
-    basePan = st.panOff;
-    cv.setPointerCapture(e.pointerId);
-    if (st.moveLine || dragAxis) {
-      st.selBar = barAt(e.clientX);
-      drawChart();
-    }
-  };
-
-  cv.onpointermove = e => {
-    if (!dragging) return;
-    const dx = e.clientX - downX;
-    if (Math.abs(dx) > 4) {
-      moved = true;
-    }
-    const rect =
-      cv.getBoundingClientRect();
-    if (st.moveLine || dragAxis) {
-      const lx = e.clientX - rect.left;
-      const plotW = Math.max(
-        1,
-        rect.width - 58
-      );
-      if (lx < 24) {
-        panBackward(2);
-      } else if (lx > plotW - 24 &&
-        st.panOff > 0) {
-        panForward(2);
+      const pb = st.pillBox;
+      if (pb &&
+        x >= pb.x - 6 &&
+        x <= pb.x + pb.w + 6 &&
+        y >= pb.y - 6 &&
+        y <= pb.y + pb.h + 6) {
+        if (x < pb.x + 28) {
+          stepBar(-1);
+          return;
+        }
+        if (x > pb.x + pb.w - 28) {
+          stepBar(1);
+          return;
+        }
+        dragMode = "line";
+        cv.setPointerCapture(
+          e.pointerId
+        );
+        return;
       }
-      st.selBar = barAt(e.clientX);
-      drawChart();
-      return;
-    }
-    if (!moved) return;
-    const {
-      startB,
-      endB
-    } = getVisRange();
-    const span = Math.max(
-      1,
-      endB - startB
-    );
-    const useW = Math.max(
-      1,
-      rect.width - 58 - 12
-    );
-    const dBars = Math.round(
-      (dx / useW) * span
-    );
-    const maxP = maxPanLimit();
-    st.panOff = Math.max(
-      0,
-      Math.min(maxP, basePan + dBars)
-    );
-    drawChart();
-  };
 
-  cv.onpointerup = e => {
-    if (!dragging) return;
-    dragging = false;
-    dragAxis = false;
-    if (!moved) {
-      st.selBar = barAt(e.clientX);
-      drawChart();
+      const inBotAxis =
+        y >= rect.height - 42;
+      if (st.moveLine || inBotAxis) {
+        dragMode = "line";
+        const b = barFromX(
+          x,
+          rect.width
+        );
+        st.selBar = b;
+        document.getElementById(
+          "btnSetAnc"
+        ).style.display =
+          b < st.candles.length
+            ? "inline-block" : "none";
+        drawChart();
+      } else {
+        dragMode = "pan";
+        dragBasePan = st.panOff;
+      }
+      cv.setPointerCapture(
+        e.pointerId
+      );
     }
-  };
+  );
 
-  cv.onwheel = e => {
-    e.preventDefault();
-    const step =
-      e.deltaY > 0 ? 20 : -20;
-    st.histBars = Math.max(
-      45,
-      Math.min(
-        360,
-        st.histBars + step
-      )
-    );
-    savePrefs();
-    drawChart();
-  };
-
-  window.onkeydown = e => {
-    const tag = document
-      .activeElement?.tagName;
-    if (tag === "INPUT" ||
-      tag === "SELECT") {
-      return;
+  cv.addEventListener(
+    "pointermove",
+    e => {
+      if (!dragMode) return;
+      const rect =
+        cv.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (Math.abs(x - dragStartX) > 3) {
+        moved = true;
+      }
+      if (dragMode === "line") {
+        const plotW = Math.max(
+          1,
+          rect.width - 58
+        );
+        if (x < 24) {
+          st.panOff = Math.min(
+            maxPanLimit(),
+            st.panOff + 2
+          );
+        } else if (x > plotW - 24 &&
+          st.panOff > 0) {
+          st.panOff = Math.max(
+            0,
+            st.panOff - 2
+          );
+        }
+        const b = barFromX(
+          x,
+          rect.width
+        );
+        st.selBar = b;
+        document.getElementById(
+          "btnSetAnc"
+        ).style.display =
+          b < st.candles.length
+            ? "inline-block" : "none";
+        drawChart();
+      } else if (dragMode === "pan") {
+        const vr = getVisRange();
+        const span = Math.max(
+          1,
+          vr.endB - vr.startB
+        );
+        const usable = Math.max(
+          1,
+          rect.width - 58
+        );
+        const dx = x - dragStartX;
+        const dBars = Math.round(
+          (dx / usable) * span
+        );
+        st.panOff = Math.max(
+          0,
+          Math.min(
+            maxPanLimit(),
+            dragBasePan + dBars
+          )
+        );
+        drawChart();
+      }
     }
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      stepBar(-1);
-    } else if (
-      e.key === "ArrowRight"
-    ) {
-      e.preventDefault();
-      stepBar(1);
-    }
-  };
+  );
 
-  const ro = new ResizeObserver(() => {
-    drawChart();
-  });
-  ro.observe(
-    document.getElementById("cWrap")
+  cv.addEventListener(
+    "pointerup",
+    e => {
+      if (dragMode === "pan" &&
+        !moved) {
+        const rect =
+          cv.getBoundingClientRect();
+        const b = barFromX(
+          e.clientX - rect.left,
+          rect.width
+        );
+        st.selBar = b;
+        document.getElementById(
+          "btnSetAnc"
+        ).style.display =
+          b < st.candles.length
+            ? "inline-block" : "none";
+        drawChart();
+      }
+      dragMode = null;
+    }
+  );
+
+  window.addEventListener(
+    "resize",
+    drawChart
   );
 }
 
@@ -5608,7 +5642,7 @@ loadAlertsLocal();
 fillPresets();
 initEvents();
 loadSymbol();
-setInterval(pollWebAlerts, 45000);
+initBgWorker();
 </script>
 </body>
 </html>
