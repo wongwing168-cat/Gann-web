@@ -474,9 +474,12 @@ async function runAlertScan() {
       triggered: []
     };
   }
+  const needQuote = active.filter(
+    a => !a.isPendingDelivery
+  );
   const syms = [
     ...new Set(
-      active.map(a => a.symbol)
+      needQuote.map(a => a.symbol)
     )
   ];
   const prices = {};
@@ -484,29 +487,69 @@ async function runAlertScan() {
     const p = await fetchLatestSpot(s);
     if (p != null) prices[s] = p;
   }
+
+  const hkNow = new Date(
+    Date.now() + 8 * 3600 * 1000
+  );
+  const curMins =
+    hkNow.getUTCHours() * 60 +
+    hkNow.getUTCMinutes();
+
   const hitList = [];
   for (const item of cloudStore.alerts) {
     if (!item.isEnabled ||
       item.isTriggered) {
       continue;
     }
-    const curP = prices[item.symbol];
-    if (curP == null) continue;
-    const ok = item.condition === "向上突破"
-      ? curP >= item.targetPrice
-      : curP <= item.targetPrice;
-    if (ok) {
-      item.isTriggered = true;
-      item.isEnabled = false;
+
+    if (!item.isPendingDelivery) {
+      const curP = prices[item.symbol];
+      if (curP == null) continue;
+      const ok = item.condition === "向上突破"
+        ? curP >= item.targetPrice
+        : curP <= item.targetPrice;
+      if (!ok) continue;
+
       item.triggeredPrice = curP;
       item.triggeredAt =
         new Date().toISOString();
-      hitList.push(item);
-      await pushToBark(
-        cloudStore.barkKey,
-        item,
-        curP
+      if (item.notifyMode ===
+        "scheduled") {
+        item.isPendingDelivery = true;
+      } else {
+        item.isTriggered = true;
+        item.isEnabled = false;
+        hitList.push(item);
+        await pushToBark(
+          cloudStore.barkKey,
+          item,
+          curP
+        );
+        continue;
+      }
+    }
+
+    if (item.isPendingDelivery) {
+      const sh = Number(
+        item.schedHour ?? 8
       );
+      const sm = Number(
+        item.schedMinute ?? 30
+      );
+      const dueMins = sh * 60 + sm;
+      if (curMins >= dueMins) {
+        item.isPendingDelivery = false;
+        item.isTriggered = true;
+        item.isEnabled = false;
+        hitList.push(item);
+        const p = item.triggeredPrice ??
+          item.targetPrice;
+        await pushToBark(
+          cloudStore.barkKey,
+          item,
+          p
+        );
+      }
     }
   }
   return {
