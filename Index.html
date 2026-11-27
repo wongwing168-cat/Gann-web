@@ -605,7 +605,23 @@ canvas {
   <div class="modal-box">
     <div class="c-hd c-org">
       <span>🔔 江恩到價作戰計劃與響鬧</span>
-      <div style="display:flex;gap:5px">
+      <div style="display:flex;gap:5px;align-items:center">
+        <select
+          id="ringToneSel"
+          style="width:108px;font-size:11px">
+          <option value="alarm">
+            急促鬧鈴(Alarm)
+          </option>
+          <option value="bell">
+            清脆鐘聲(Bell)
+          </option>
+          <option value="electronic">
+            雷達雙音(Radar)
+          </option>
+          <option value="minuet">
+            柔和琴音(Soft)
+          </option>
+        </select>
         <button
           class="btn btn-y"
           id="btnTestRing">測鈴聲</button>
@@ -1040,6 +1056,7 @@ const PREF_KEY = "gann_web_prefs_v2";
 const SAVED_KEY = "gann_web_saved_v1";
 const ALERT_KEY = "gann_web_alerts_v1";
 const BARK_KEY = "gann_web_bark_v1";
+const TONE_KEY = "gann_web_tone_v1";
 
 const st = {
   market: "hk",
@@ -1069,6 +1086,7 @@ const st = {
   saved: [],
   alerts: [],
   barkKey: "",
+  ringTone: "alarm",
   ringTimer: null
 };
 
@@ -4624,28 +4642,45 @@ function playWebAlarm() {
       window.webkitAudioContext;
     const ctx = new Ctx();
     const now = ctx.currentTime;
-    for (let i = 0; i < 4; i++) {
+    const tone = st.ringTone || "alarm";
+    let freqs = [880, 1175, 880, 1175];
+    let wave = "triangle";
+    let step = 0.16;
+    if (tone === "bell") {
+      freqs = [1046.5, 1318.5, 1568, 2093];
+      wave = "sine";
+      step = 0.22;
+    } else if (tone === "electronic") {
+      freqs = [1400, 950, 1400, 950];
+      wave = "sawtooth";
+      step = 0.13;
+    } else if (tone === "minuet") {
+      freqs = [523.25, 659.25, 783.99, 1046.5];
+      wave = "sine";
+      step = 0.26;
+    }
+    for (let i = 0; i < freqs.length; i++) {
       const osc =
         ctx.createOscillator();
       const gain =
         ctx.createGain();
-      osc.type = "triangle";
+      osc.type = wave;
       osc.frequency.setValueAtTime(
-        i % 2 === 0 ? 880 : 1175,
-        now + i * 0.16
+        freqs[i],
+        now + i * step
       );
       gain.gain.setValueAtTime(
-        0.25,
-        now + i * 0.16
+        tone === "electronic" ? 0.16 : 0.26,
+        now + i * step
       );
       gain.gain.exponentialRampToValueAtTime(
         0.001,
-        now + i * 0.16 + 0.14
+        now + i * step + step * 0.92
       );
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.start(now + i * 0.16);
-      osc.stop(now + i * 0.16 + 0.15);
+      osc.start(now + i * step);
+      osc.stop(now + i * step + step);
     }
   } catch (e) {}
 }
@@ -4662,6 +4697,13 @@ function startWebRingLoop() {
 function loadAlertsLocal() {
   st.barkKey =
     localStorage.getItem(BARK_KEY) || "";
+  st.ringTone =
+    localStorage.getItem(TONE_KEY) ||
+    "alarm";
+  const tSel = document.getElementById(
+    "ringToneSel"
+  );
+  if (tSel) tSel.value = st.ringTone;
   const raw =
     localStorage.getItem(ALERT_KEY);
   if (raw) {
@@ -4681,6 +4723,10 @@ async function syncAlertsCloud() {
       st.barkKey
     );
     localStorage.setItem(
+      TONE_KEY,
+      st.ringTone
+    );
+    localStorage.setItem(
       ALERT_KEY,
       JSON.stringify(st.alerts)
     );
@@ -4698,6 +4744,7 @@ async function syncAlertsCloud() {
         },
         body: JSON.stringify({
           barkKey: st.barkKey,
+          ringTone: st.ringTone,
           alerts: st.alerts
         })
       }
@@ -5110,6 +5157,14 @@ function initEvents() {
   document.getElementById(
     "btnTestRing"
   ).onclick = playWebAlarm;
+
+  document.getElementById(
+    "ringToneSel"
+  ).onchange = e => {
+    st.ringTone = e.target.value;
+    playWebAlarm();
+    syncAlertsCloud();
+  };
 
   document.getElementById(
     "btnSaveBark"
