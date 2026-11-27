@@ -386,6 +386,7 @@ async function tryYahooSearch(q) {
 
 let cloudStore = {
   barkKey: "",
+  ringTone: "alarm",
   alerts: []
 };
 
@@ -445,6 +446,9 @@ async function pushToBark(
   const tStr = Number(
     item.targetPrice
   ).toFixed(2);
+  const snd = encodeURIComponent(
+    cloudStore.ringTone || "alarm"
+  );
   const title = encodeURIComponent(
     "🔔 " + item.symbol +
     " 到價 " + pStr
@@ -457,7 +461,8 @@ async function pushToBark(
     "https://api.day.app/" +
     encodeURIComponent(barkKey) +
     "/" + title + "/" + body +
-    "?sound=alarm&level=timeSensitive";
+    "?sound=" + snd +
+    "&level=timeSensitive";
   try {
     await fetchTimeout(url, {}, 5000);
   } catch (e) {}
@@ -578,6 +583,10 @@ exports.handler = async (event) => {
       if (payload.barkKey != null) {
         cloudStore.barkKey =
           String(payload.barkKey).trim();
+      }
+      if (payload.ringTone != null) {
+        cloudStore.ringTone =
+          String(payload.ringTone).trim();
       }
       if (Array.isArray(
         payload.alerts
